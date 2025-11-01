@@ -32,9 +32,9 @@ public class HookController : MonoBehaviour
     [Header("Line Settings")]
     [Tooltip("Толщина линии от игрока до крюка (цепь)")]
     [Range(0.01f, 0.2f)]
-    public float lineThickness = 0.12f; // Заметная толщина для видимости (как на картинках)
+    public float lineThickness = 0.03f; // Тонкая металлическая цепь
     [Tooltip("Цвет линии от игрока до крюка (цепь)")]
-    public Color lineColor = new Color(0.8f, 0.5f, 0.2f, 1f); // Коричнево-оранжевый цвет веревки (как на картинках)
+    public Color lineColor = new Color(0.7f, 0.7f, 0.75f, 1f); // Металлический серый цвет
     
     [Header("Circular Arc")]
     [Tooltip("Угол дуги в градусах (больше = длиннее дуга)")]
@@ -121,7 +121,7 @@ public class HookController : MonoBehaviour
         // Убеждаемся что спрайт видим
         if (spriteRenderer.sprite != null)
         {
-            spriteRenderer.color = new Color(1f, 0.4f, 0.3f, 1f);
+            spriteRenderer.color = Color.white;
         }
         
         // Устанавливаем размер крюка
@@ -224,10 +224,9 @@ public class HookController : MonoBehaviour
             {
             lineRenderer.startColor = lineColor;
             lineRenderer.endColor = lineColor;
-            // Используем заметную толщину для хорошей видимости
-            float defaultThickness = Mathf.Max(lineThickness, 0.08f);
-            lineRenderer.startWidth = defaultThickness;
-            lineRenderer.endWidth = defaultThickness;
+            // Тонкая металлическая цепь
+            lineRenderer.startWidth = lineThickness;
+            lineRenderer.endWidth = lineThickness;
             lineRenderer.positionCount = chainPoints; // Используем больше точек для плавной провисающей цепи
             lineRenderer.sortingOrder = 4; // Увеличили для видимости
             lineRenderer.useWorldSpace = true;
@@ -349,7 +348,7 @@ public class HookController : MonoBehaviour
                 CreateHookSprite();
             }
             spriteRenderer.enabled = true;
-            spriteRenderer.color = new Color(1f, 0.4f, 0.3f, 1f);
+            spriteRenderer.color = Color.white;
             spriteRenderer.sortingOrder = 5;
         }
         
@@ -364,10 +363,9 @@ public class HookController : MonoBehaviour
             lineRenderer.enabled = true;
             lineRenderer.startColor = lineColor;
             lineRenderer.endColor = lineColor;
-            // Заметная толщина цепи для хорошей видимости (как на картинках)
-            float visibleThickness = Mathf.Max(lineThickness, 0.08f); // Минимум для хорошей видимости
-            lineRenderer.startWidth = visibleThickness;
-            lineRenderer.endWidth = visibleThickness;
+            // Тонкая металлическая цепь
+            lineRenderer.startWidth = lineThickness;
+            lineRenderer.endWidth = lineThickness;
             lineRenderer.sortingOrder = 4;
             
             // Обновляем провисающую цепь от игрока до крюка (с большим провисанием в покое)
@@ -507,10 +505,9 @@ public class HookController : MonoBehaviour
         lineRenderer.enabled = true;
         lineRenderer.startColor = lineColor;
         lineRenderer.endColor = lineColor;
-        // Используем заметную толщину для хорошей видимости
-        float castThickness = Mathf.Max(lineThickness, 0.08f);
-        lineRenderer.startWidth = castThickness;
-        lineRenderer.endWidth = castThickness;
+        // Тонкая металлическая цепь
+        lineRenderer.startWidth = lineThickness;
+        lineRenderer.endWidth = lineThickness;
         lineRenderer.sortingOrder = 4;
         
         // Устанавливаем начальные позиции для всех точек цепи
@@ -1036,7 +1033,7 @@ public class HookController : MonoBehaviour
         
         Sprite sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
         spriteRenderer.sprite = sprite;
-            spriteRenderer.color = new Color(1f, 0.4f, 0.3f, 1f); // Яркий красно-оранжевый цвет крюка
+            spriteRenderer.color = Color.white;
         
         // Применяем размер крюка
         ApplyHookScale();

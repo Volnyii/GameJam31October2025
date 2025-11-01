@@ -131,10 +131,7 @@ public class CastleSceneSetup : MonoBehaviour
         // 2. Создаем фон
         SetupBackground(mainCam);
         
-        // 3. Создаем замок
-        SpriteRenderer castle = SetupCastle();
-        
-        // 4. Создаем игрока на вершине замка
+        // 3. Создаем игрока
         CastlePlayer player = SetupPlayer();
         
         // 5. Создаем крюк
@@ -240,26 +237,9 @@ public class CastleSceneSetup : MonoBehaviour
         bgRenderer.color = Color.white;
         bgRenderer.sortingOrder = 0;
         
-        // Позиционируем и масштабируем фон под размер камеры
-        float screenHeight = 2f * cam.orthographicSize;
-        float screenWidth = screenHeight * cam.aspect;
-        
-        // Масштабируем спрайт чтобы он покрывал весь экран
-        if (bgSprite != null)
-        {
-            float spriteWidth = bgSprite.bounds.size.x;
-            float spriteHeight = bgSprite.bounds.size.y;
-            float scaleX = screenWidth / spriteWidth;
-            float scaleY = screenHeight / spriteHeight;
-            
-            bgObj.transform.position = cam.transform.position + Vector3.forward * 1f;
-            bgObj.transform.localScale = new Vector3(scaleX, scaleY, 1f);
-        }
-        else
-        {
-            bgObj.transform.position = cam.transform.position + Vector3.forward * 1f;
-            bgObj.transform.localScale = new Vector3(screenWidth, screenHeight, 1f);
-        }
+        // Позиционируем и масштабируем фон
+        bgObj.transform.position = cam.transform.position + Vector3.forward * 1f;
+        bgObj.transform.localScale = new Vector3(0.015f, 0.015f, 1f);
         
         Debug.Log("✓ Фон создан и масштабирован под размер камеры");
         return bgRenderer;

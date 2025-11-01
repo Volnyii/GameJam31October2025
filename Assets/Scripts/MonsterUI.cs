@@ -28,6 +28,15 @@ public class MonsterUI : MonoBehaviour
     private Vector2 currentTarget;
     private bool isDead = false;
     private Camera mainCamera;
+    private Vector3 originalScale = Vector3.one; // Сохраняем исходный масштаб из префаба
+    
+    /// <summary>
+    /// Устанавливает исходный масштаб из префаба (для сохранения при отражении)
+    /// </summary>
+    public void SetOriginalScale(Vector3 scale)
+    {
+        originalScale = scale;
+    }
     
     void Awake()
     {
@@ -37,6 +46,12 @@ public class MonsterUI : MonoBehaviour
     void Start()
     {
         mainCamera = Camera.main;
+        
+        // Сохраняем исходный масштаб из префаба (если он не был установлен ранее)
+        if (rectTransform != null && originalScale == Vector3.one && rectTransform.localScale != Vector3.one)
+        {
+            originalScale = rectTransform.localScale;
+        }
         
         // Если цель не установлена, устанавливаем её
         if (currentTarget == Vector2.zero)
@@ -99,6 +114,9 @@ public class MonsterUI : MonoBehaviour
     {
         if (isDead) return;
         
+        // Убеждаемся что монстр на нижней границе экрана
+        MaintainBottomPosition();
+        
         MoveTowardsTarget();
         
         // Применяем обтекание экрана
@@ -108,33 +126,61 @@ public class MonsterUI : MonoBehaviour
         }
     }
     
+    /// <summary>
+    /// Поддерживает позицию монстра на нижней границе экрана
+    /// </summary>
+    void MaintainBottomPosition()
+    {
+        if (rectTransform == null) return;
+        
+        // Для Canvas в ScreenSpaceOverlay нижняя граница примерно 100-150 пикселей от низа
+        float bottomY = 100f; // Отступ от низа экрана в пикселях
+        
+        Vector2 pos = rectTransform.anchoredPosition;
+        pos.y = bottomY;
+        rectTransform.anchoredPosition = pos;
+    }
+    
     void MoveTowardsTarget()
     {
         if (rectTransform == null) return;
         
-        // Движение по Canvas в пикселях
-        float pixelsPerSecond = moveSpeed * 100f; // 1 unit = 100px
-        rectTransform.anchoredPosition = Vector2.MoveTowards(
-            rectTransform.anchoredPosition, 
-            currentTarget, 
-            pixelsPerSecond * Time.deltaTime
-        );
+        // Движение только по горизонтали, Y всегда на нижней границе
+        Vector2 currentPos = rectTransform.anchoredPosition;
+        Vector2 targetPos = currentTarget;
         
-        // Поворачиваем спрайт в сторону движения
+        // Двигаемся только по X, Y остается на нижней границе
+        float pixelsPerSecond = moveSpeed * 100f; // 1 unit = 100px
+        currentPos.x = Mathf.MoveTowards(currentPos.x, targetPos.x, pixelsPerSecond * Time.deltaTime);
+        
+        // Поддерживаем Y на нижней границе экрана
+        currentPos.y = 100f; // Нижняя граница в пикселях
+        
+        rectTransform.anchoredPosition = currentPos;
+        
+        // Поворачиваем спрайт в сторону движения (сохраняем масштаб из префаба)
         float currentX = rectTransform.anchoredPosition.x;
         float targetX = currentTarget.x;
         
+        // Сохраняем исходный масштаб при первом использовании
+        if (originalScale == Vector3.one && rectTransform.localScale != Vector3.one && rectTransform.localScale != new Vector3(-1, 1, 1))
+        {
+            originalScale = rectTransform.localScale;
+        }
+        
         if (currentX < targetX)
         {
-            rectTransform.localScale = new Vector3(1, 1, 1); // Смотрим вправо
+            // Смотрим вправо - используем исходный масштаб
+            rectTransform.localScale = originalScale;
         }
         else if (currentX > targetX)
         {
-            rectTransform.localScale = new Vector3(-1, 1, 1); // Смотрим влево
+            // Смотрим влево - отражаем по X, сохраняя Y и Z
+            rectTransform.localScale = new Vector3(-originalScale.x, originalScale.y, originalScale.z);
         }
         
         // Если достигли цели или очень близко, выбираем новую
-        float distanceToTarget = Vector2.Distance(rectTransform.anchoredPosition, currentTarget);
+        float distanceToTarget = Mathf.Abs(rectTransform.anchoredPosition.x - currentTarget.x);
         if (distanceToTarget < 20f) // Порог в пикселях
         {
             SetRandomTarget();
@@ -150,6 +196,7 @@ public class MonsterUI : MonoBehaviour
         float screenWidth = 1080f; // Reference resolution width в пикселях
         float leftBound = -screenWidth / 2f;
         float rightBound = screenWidth / 2f;
+        float bottomY = 100f; // Нижняя граница экрана
         
         Vector2 pos = rectTransform.anchoredPosition;
         
@@ -157,6 +204,7 @@ public class MonsterUI : MonoBehaviour
         if (pos.x < leftBound)
         {
             pos.x = rightBound - 50f; // Немного отступ от края
+            pos.y = bottomY; // Поддерживаем нижнюю границу
             rectTransform.anchoredPosition = pos;
             SetRandomTarget();
         }
@@ -164,6 +212,7 @@ public class MonsterUI : MonoBehaviour
         else if (pos.x > rightBound)
         {
             pos.x = leftBound + 50f; // Немного отступ от края
+            pos.y = bottomY; // Поддерживаем нижнюю границу
             rectTransform.anchoredPosition = pos;
             SetRandomTarget();
         }
@@ -171,26 +220,18 @@ public class MonsterUI : MonoBehaviour
     
     void SetRandomTarget()
     {
-        // Выбираем случайную точку на окружности вокруг центра замка
-        float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-        float groundLevel = 200f; // Уровень земли от низа Canvas (в пикселях)
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
         
-        // centerPosition уже должно быть в пикселях (устанавливается в MonsterSpawnerUI)
-        // Центр замка на Canvas: x = 0 (центр экрана)
-        float centerX = centerPosition.x;
+        // Для ScreenSpaceOverlay используем размер reference resolution
+        float screenWidth = 1080f; // Reference resolution width в пикселях
+        float leftBound = -screenWidth / 2f + 50f; // Отступ от краев
+        float rightBound = screenWidth / 2f - 50f;
+        float bottomY = 100f; // Нижняя граница экрана в пикселях
         
-        // Вычисляем целевую позицию на окружности
-        float radiusInPixels = patrolRadius * 100f; // Конвертируем радиус в пиксели
-        currentTarget = new Vector2(
-            centerX + Mathf.Cos(angle) * radiusInPixels, // X позиция на окружности
-            groundLevel + Mathf.Sin(angle) * radiusInPixels * 0.3f // Небольшая вариация по Y
-        );
-        
-        // Ограничиваем целевую позицию в разумных пределах экрана
-        currentTarget.x = Mathf.Clamp(currentTarget.x, -500f, 500f);
-        currentTarget.y = Mathf.Clamp(currentTarget.y, 150f, 400f);
-        
-        // Debug.Log($"Монстр {gameObject.name} выбрал новую цель: {currentTarget}"); // Можно включить для отладки
+        // Выбираем случайную точку по горизонтали на нижней границе экрана
+        float randomX = Random.Range(leftBound, rightBound);
+        currentTarget = new Vector2(randomX, bottomY);
     }
     
     public void SetAnimatorController(int index)

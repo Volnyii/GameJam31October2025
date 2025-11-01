@@ -75,11 +75,8 @@ public class CastleSceneSetupUI : MonoBehaviour
         // 2. Создаем фоновое изображение
         Image background = SetupBackground(canvas);
         
-        // 3. Создаем замок как UI элемент
-        Image castle = SetupCastle(canvas);
-        
-        // 4. Создаем игрока на вершине замка
-        CastlePlayerUI player = SetupPlayer(canvas, castle);
+        // 3. Создаем игрока
+        CastlePlayerUI player = SetupPlayer(canvas, null);
         
         // 5. Создаем крюк
         HookUI hook = SetupHook(canvas, player);
@@ -91,7 +88,7 @@ public class CastleSceneSetupUI : MonoBehaviour
         CastleGameTouchControllerUI touchController = SetupTouchController(canvas, hook, arrow, player);
         
         // 8. Создаем спавнер монстров
-        MonsterSpawnerUI spawner = SetupMonsterSpawner(canvas, castle);
+        MonsterSpawnerUI spawner = SetupMonsterSpawner(canvas, null);
         
         // 9. Создаем UI Manager
         CastleUIManager uiManager = SetupUI(canvas);
@@ -297,6 +294,7 @@ public class CastleSceneSetupUI : MonoBehaviour
             rect.anchorMax = Vector2.one;
             rect.sizeDelta = Vector2.zero;
             rect.anchoredPosition = Vector2.zero;
+            rect.localScale = new Vector3(0.015f, 0.015f, 1f);
             
             bgImage = bgObj.AddComponent<Image>();
             bgImage.color = Color.white;
@@ -325,6 +323,13 @@ public class CastleSceneSetupUI : MonoBehaviour
             bgImage.color = Color.white;
             bgImage.enabled = true;
             bgObj.SetActive(true);
+            
+            // Устанавливаем scale
+            RectTransform existingRect = bgObj.GetComponent<RectTransform>();
+            if (existingRect != null)
+            {
+                existingRect.localScale = new Vector3(0.015f, 0.015f, 1f);
+            }
         }
         
         Debug.Log($"✓ Фоновое изображение создано/проверено");

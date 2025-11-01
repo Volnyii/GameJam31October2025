@@ -84,6 +84,8 @@ public class MonsterSpawnerUI : MonoBehaviour
                 for (int i = 0; i < 3; i++)
                 {
                     GameObject precreated = CreateMonsterFromPrefab(monsterPrefab);
+                    // Убеждаемся что масштаб из префаба сохранен
+                    precreated.transform.localScale = monsterPrefab.transform.localScale;
                     precreated.SetActive(false);
                     pool.Enqueue(precreated);
                 }
@@ -103,6 +105,8 @@ public class MonsterSpawnerUI : MonoBehaviour
             for (int i = 0; i < monsterType.poolMinSize; i++)
             {
                 GameObject precreated = CreateMonsterFromPrefab(monsterType.monsterPrefab);
+                // Убеждаемся что масштаб из префаба сохранен
+                precreated.transform.localScale = monsterType.monsterPrefab.transform.localScale;
                 precreated.SetActive(false);
                 pool.Enqueue(precreated);
             }
@@ -165,6 +169,7 @@ public class MonsterSpawnerUI : MonoBehaviour
         }
         
         GameObject monster = null;
+        MonsterUI monsterUI = null;
         
         // Пытаемся взять из пула
         if (monsterPools.ContainsKey(prefab))
@@ -173,6 +178,17 @@ public class MonsterSpawnerUI : MonoBehaviour
             if (pool.Count > 0)
             {
                 monster = pool.Dequeue();
+                // Восстанавливаем масштаб из префаба при активации из пула
+                Vector3 prefabScale = prefab.transform.localScale;
+                monster.transform.localScale = prefabScale; // Всегда восстанавливаем масштаб из префаба
+                
+                // Обновляем originalScale в контроллере
+                monsterUI = monster.GetComponent<MonsterUI>();
+                if (monsterUI != null)
+                {
+                    monsterUI.SetOriginalScale(prefabScale);
+                }
+                
                 monster.SetActive(true);
             }
         }
@@ -189,6 +205,16 @@ public class MonsterSpawnerUI : MonoBehaviour
             monsterTypeMap[monster] = prefab;
         }
         
+        // Получаем или создаем контроллер монстра
+        if (monsterUI == null)
+        {
+            monsterUI = monster.GetComponent<MonsterUI>();
+            if (monsterUI == null)
+            {
+                monsterUI = monster.AddComponent<MonsterUI>();
+            }
+        }
+        
         // Устанавливаем позицию на окружности вокруг замка
         // Монстры ходят на уровне земли (y = 200px от низа экрана)
         // Распределяем монстров равномерно по окружности
@@ -201,12 +227,6 @@ public class MonsterSpawnerUI : MonoBehaviour
             castleCenter.x + Mathf.Cos(angle) * spawnRadius * 100f, // Масштаб: 1 unit = 100px
             groundLevel + Mathf.Sin(angle) * spawnRadius * 30f // Небольшая вариация по Y
         );
-        
-        MonsterUI monsterUI = monster.GetComponent<MonsterUI>();
-        if (monsterUI == null)
-        {
-            monsterUI = monster.AddComponent<MonsterUI>();
-        }
         
         monsterUI.Position = position;
         // centerPosition должен быть в пикселях для Canvas (0,0 - центр Canvas)
@@ -281,8 +301,12 @@ public class MonsterSpawnerUI : MonoBehaviour
             return mons;
         }
         
-        // Создаем из префаба
+        // Создаем из префаба (сохраняем масштаб из префаба)
         var monster = Instantiate(prefab);
+        
+        // Сохраняем масштаб из префаба
+        Vector3 prefabScale = prefab.transform.localScale;
+        monster.transform.localScale = prefabScale; // Всегда используем масштаб из префаба
         
         // Если префаб не настроен, автоматически настраиваем
         MonsterUI monsterUI = monster.GetComponent<MonsterUI>();
@@ -291,6 +315,9 @@ public class MonsterSpawnerUI : MonoBehaviour
             monsterUI = monster.AddComponent<MonsterUI>();
         }
         
+        // Сохраняем масштаб в контроллере монстра для правильного отражения
+        monsterUI.SetOriginalScale(prefabScale);
+        
         // Автоматически настраиваем компоненты если нужно
         monsterUI.SetupMonsterComponents();
         
@@ -298,6 +325,8 @@ public class MonsterSpawnerUI : MonoBehaviour
         if (parentCanvas != null)
         {
             monster.transform.SetParent(parentCanvas.transform, false);
+            // После SetParent нужно снова установить масштаб из префаба
+            monster.transform.localScale = prefabScale;
         }
         
         return monster;

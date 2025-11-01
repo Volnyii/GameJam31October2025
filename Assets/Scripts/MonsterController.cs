@@ -21,6 +21,15 @@ public class MonsterController : MonoBehaviour
     private Vector3 currentTarget;
     private bool isDead = false;
     private Camera mainCamera;
+    private Vector3 originalScale = Vector3.one; // Сохраняем исходный масштаб из префаба
+    
+    /// <summary>
+    /// Устанавливает исходный масштаб из префаба (для сохранения при отражении)
+    /// </summary>
+    public void SetOriginalScale(Vector3 scale)
+    {
+        originalScale = scale;
+    }
     
     void Awake()
     {
@@ -30,6 +39,12 @@ public class MonsterController : MonoBehaviour
     void Start()
     {
         mainCamera = Camera.main;
+        
+        // Сохраняем исходный масштаб из префаба (если он не был установлен ранее)
+        if (originalScale == Vector3.one && transform.localScale != Vector3.one)
+        {
+            originalScale = transform.localScale;
+        }
         
         // Если цель не установлена, устанавливаем её
         if (currentTarget == Vector3.zero)
@@ -70,6 +85,9 @@ public class MonsterController : MonoBehaviour
     {
         if (isDead) return;
         
+        // Убеждаемся что монстр на нижней границе камеры
+        MaintainBottomPosition();
+        
         MoveTowardsTarget();
         
         // Применяем обтекание экрана
@@ -79,32 +97,70 @@ public class MonsterController : MonoBehaviour
         }
     }
     
+    /// <summary>
+    /// Поддерживает позицию монстра на нижней границе камеры
+    /// </summary>
+    void MaintainBottomPosition()
+    {
+        if (mainCamera == null)
+        {
+            mainCamera = Camera.main;
+            if (mainCamera == null) return;
+        }
+        
+        // Вычисляем нижнюю границу камеры
+        float screenHeight = 2f * mainCamera.orthographicSize;
+        float bottomY = mainCamera.transform.position.y - screenHeight / 2f;
+        
+        // Устанавливаем Y на нижнюю границу, сохраняя X
+        Vector3 pos = transform.position;
+        pos.y = bottomY;
+        transform.position = pos;
+    }
+    
     void MoveTowardsTarget()
     {
         if (spriteRenderer == null) return;
         
-        // Движение в мировых координатах
-        transform.position = Vector3.MoveTowards(
-            transform.position, 
-            currentTarget, 
-            moveSpeed * Time.deltaTime
-        );
+        // Движение только по горизонтали, Y всегда на нижней границе камеры
+        Vector3 currentPos = transform.position;
+        Vector3 targetPos = currentTarget;
         
-        // Поворачиваем спрайт в сторону движения
+        // Двигаемся только по X, Y остается на нижней границе
+        currentPos.x = Mathf.MoveTowards(currentPos.x, targetPos.x, moveSpeed * Time.deltaTime);
+        
+        // Поддерживаем Y на нижней границе камеры
+        if (mainCamera != null)
+        {
+            float screenHeight = 2f * mainCamera.orthographicSize;
+            currentPos.y = mainCamera.transform.position.y - screenHeight / 2f;
+        }
+        
+        transform.position = currentPos;
+        
+        // Поворачиваем спрайт в сторону движения (сохраняем масштаб из префаба)
         float currentX = transform.position.x;
         float targetX = currentTarget.x;
         
+        // Сохраняем исходный масштаб при первом использовании
+        if (originalScale == Vector3.one && transform.localScale != Vector3.one && transform.localScale != new Vector3(-1, 1, 1))
+        {
+            originalScale = transform.localScale;
+        }
+        
         if (currentX < targetX)
         {
-            transform.localScale = new Vector3(1, 1, 1); // Смотрим вправо
+            // Смотрим вправо - используем исходный масштаб
+            transform.localScale = originalScale;
         }
         else if (currentX > targetX)
         {
-            transform.localScale = new Vector3(-1, 1, 1); // Смотрим влево
+            // Смотрим влево - отражаем по X, сохраняя Y и Z
+            transform.localScale = new Vector3(-originalScale.x, originalScale.y, originalScale.z);
         }
         
         // Если достигли цели или очень близко, выбираем новую
-        float distanceToTarget = Vector3.Distance(transform.position, currentTarget);
+        float distanceToTarget = Mathf.Abs(transform.position.x - currentTarget.x);
         if (distanceToTarget < 0.2f)
         {
             SetRandomTarget();
@@ -113,7 +169,11 @@ public class MonsterController : MonoBehaviour
     
     void WrapAroundScreen()
     {
-        if (mainCamera == null) return;
+        if (mainCamera == null)
+        {
+            mainCamera = Camera.main;
+            if (mainCamera == null) return;
+        }
         
         // Получаем границы экрана в мировых координатах
         float screenHeight = 2f * mainCamera.orthographicSize;
@@ -121,6 +181,7 @@ public class MonsterController : MonoBehaviour
         
         float leftBound = mainCamera.transform.position.x - screenWidth / 2f;
         float rightBound = mainCamera.transform.position.x + screenWidth / 2f;
+        float bottomY = mainCamera.transform.position.y - screenHeight / 2f;
         
         Vector3 pos = transform.position;
         
@@ -128,6 +189,7 @@ public class MonsterController : MonoBehaviour
         if (pos.x < leftBound)
         {
             pos.x = rightBound - 0.5f; // Немного отступ от края
+            pos.y = bottomY; // Поддерживаем нижнюю границу
             transform.position = pos;
             SetRandomTarget();
         }
@@ -135,6 +197,7 @@ public class MonsterController : MonoBehaviour
         else if (pos.x > rightBound)
         {
             pos.x = leftBound + 0.5f; // Немного отступ от края
+            pos.y = bottomY; // Поддерживаем нижнюю границу
             transform.position = pos;
             SetRandomTarget();
         }
@@ -142,29 +205,27 @@ public class MonsterController : MonoBehaviour
     
     void SetRandomTarget()
     {
-        // Выбираем случайную точку на окружности вокруг центра замка
-        float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-        float groundLevel = centerPosition.y; // Уровень земли
-        
-        // Вычисляем целевую позицию на окружности
-        float radiusInWorld = patrolRadius;
-        currentTarget = new Vector3(
-            centerPosition.x + Mathf.Cos(angle) * radiusInWorld,
-            groundLevel + Mathf.Sin(angle) * radiusInWorld * 0.3f,
-            0
-        );
-        
-        // Ограничиваем целевую позицию в разумных пределах экрана
-        if (mainCamera != null)
+        if (mainCamera == null)
         {
-            float screenHeight = 2f * mainCamera.orthographicSize;
-            float screenWidth = screenHeight * mainCamera.aspect;
-            float leftBound = mainCamera.transform.position.x - screenWidth / 2f;
-            float rightBound = mainCamera.transform.position.x + screenWidth / 2f;
-            
-            currentTarget.x = Mathf.Clamp(currentTarget.x, leftBound + 1f, rightBound - 1f);
-            currentTarget.y = Mathf.Clamp(currentTarget.y, groundLevel - 1f, groundLevel + 3f);
+            mainCamera = Camera.main;
+            if (mainCamera == null)
+            {
+                // Если камера не найдена, используем простую позицию
+                currentTarget = new Vector3(transform.position.x + Random.Range(-5f, 5f), transform.position.y, 0);
+                return;
+            }
         }
+        
+        // Вычисляем границы камеры
+        float screenHeight = 2f * mainCamera.orthographicSize;
+        float screenWidth = screenHeight * mainCamera.aspect;
+        float leftBound = mainCamera.transform.position.x - screenWidth / 2f;
+        float rightBound = mainCamera.transform.position.x + screenWidth / 2f;
+        float bottomY = mainCamera.transform.position.y - screenHeight / 2f;
+        
+        // Выбираем случайную точку по горизонтали на нижней границе камеры
+        float randomX = Random.Range(leftBound + 1f, rightBound - 1f);
+        currentTarget = new Vector3(randomX, bottomY, 0);
     }
     
     public void SetAnimatorController(int index)

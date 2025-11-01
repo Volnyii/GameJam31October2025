@@ -82,6 +82,8 @@ public class MonsterSpawner : MonoBehaviour
                 for (int i = 0; i < 3; i++)
                 {
                     GameObject precreated = CreateMonsterFromPrefab(monsterPrefab);
+                    // Убеждаемся что масштаб из префаба сохранен
+                    precreated.transform.localScale = monsterPrefab.transform.localScale;
                     precreated.SetActive(false);
                     pool.Enqueue(precreated);
                 }
@@ -112,6 +114,8 @@ public class MonsterSpawner : MonoBehaviour
             for (int i = 0; i < monsterType.poolMinSize; i++)
             {
                 GameObject precreated = CreateMonsterFromPrefab(monsterType.monsterPrefab);
+                // Убеждаемся что масштаб из префаба сохранен
+                precreated.transform.localScale = monsterType.monsterPrefab.transform.localScale;
                 precreated.SetActive(false);
                 pool.Enqueue(precreated);
             }
@@ -171,6 +175,7 @@ public class MonsterSpawner : MonoBehaviour
         // prefab может быть null - это нормально, монстр создастся программно
         
         GameObject monster = null;
+        MonsterController monsterController = null;
         
         // Пытаемся взять из пула
         if (prefab != null && monsterPools.ContainsKey(prefab))
@@ -179,6 +184,17 @@ public class MonsterSpawner : MonoBehaviour
             if (pool.Count > 0)
             {
                 monster = pool.Dequeue();
+                // Восстанавливаем масштаб из префаба при активации из пула
+                Vector3 prefabScale = prefab.transform.localScale;
+                monster.transform.localScale = prefabScale; // Всегда восстанавливаем масштаб из префаба
+                
+                // Обновляем originalScale в контроллере
+                monsterController = monster.GetComponent<MonsterController>();
+                if (monsterController != null)
+                {
+                    monsterController.SetOriginalScale(prefabScale);
+                }
+                
                 monster.SetActive(true);
             }
         }
@@ -201,6 +217,16 @@ public class MonsterSpawner : MonoBehaviour
             monsterTypeMap[monster] = prefab;
         }
         
+        // Получаем или создаем контроллер монстра
+        if (monsterController == null)
+        {
+            monsterController = monster.GetComponent<MonsterController>();
+            if (monsterController == null)
+            {
+                monsterController = monster.AddComponent<MonsterController>();
+            }
+        }
+        
         // Устанавливаем позицию на окружности вокруг замка (в мировых координатах)
         float angleStep = 360f / monsterCount;
         int currentIndex = activeMonsters.Count;
@@ -211,12 +237,6 @@ public class MonsterSpawner : MonoBehaviour
             groundLevel + Mathf.Sin(angle) * spawnRadius * 0.3f,
             0
         );
-        
-        MonsterController monsterController = monster.GetComponent<MonsterController>();
-        if (monsterController == null)
-        {
-            monsterController = monster.AddComponent<MonsterController>();
-        }
         
         monsterController.transform.position = position;
         monsterController.centerPosition = castleCenter;
@@ -272,9 +292,16 @@ public class MonsterSpawner : MonoBehaviour
             return monster;
         }
         
-        // Создаем из префаба
+        // Создаем из префаба (сохраняем масштаб из префаба)
         monster = Instantiate(prefab);
         monster.name = "Monster";
+        
+        // Сохраняем масштаб из префаба (если он был установлен)
+        Vector3 prefabScale = prefab.transform.localScale;
+        if (prefabScale != Vector3.one)
+        {
+            monster.transform.localScale = prefabScale;
+        }
         
         // Если префаб не настроен, автоматически настраиваем
         MonsterController monsterController = monster.GetComponent<MonsterController>();
@@ -282,6 +309,9 @@ public class MonsterSpawner : MonoBehaviour
         {
             monsterController = monster.AddComponent<MonsterController>();
         }
+        
+        // Сохраняем масштаб в контроллере монстра для правильного отражения
+        monsterController.SetOriginalScale(prefabScale);
         
         // Автоматически настраиваем компоненты если нужно
         monsterController.SetupMonsterComponents();
