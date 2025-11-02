@@ -7,8 +7,18 @@ using UnityEngine;
 [RequireComponent(typeof(BoxCollider2D))]
 public class MonsterHitbox : MonoBehaviour
 {
+    [Header("Audio")]
+    [Tooltip("Звук при попадании крюка в монстра")]
+    public AudioClip hitSound;
+    [Tooltip("Громкость звука попадания (0-1)")]
+    [Range(0f, 1f)]
+    public float hitSoundVolume = 1f;
+    [Tooltip("Автоматически создавать AudioSource если его нет")]
+    public bool autoCreateAudioSource = true;
+    
     private BoxCollider2D boxCollider;
     private MonsterController monsterController;
+    private AudioSource audioSource;
     
     void Awake()
     {
@@ -45,6 +55,33 @@ public class MonsterHitbox : MonoBehaviour
         
         // Автоматически устанавливаем размер коллайдера по спрайту
         SetupColliderSize();
+        
+        // Настраиваем AudioSource если нужно
+        SetupAudioSource();
+    }
+    
+    /// <summary>
+    /// Настраивает AudioSource для воспроизведения звуков
+    /// </summary>
+    void SetupAudioSource()
+    {
+        if (autoCreateAudioSource)
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = GetComponentInParent<AudioSource>();
+            }
+            
+            if (audioSource == null)
+            {
+                // Создаем AudioSource на этом объекте
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0f; // 2D звук
+                audioSource.volume = 1f;
+            }
+        }
     }
     
     /// <summary>
@@ -94,6 +131,10 @@ public class MonsterHitbox : MonoBehaviour
             if (monsterController != null && !monsterController.IsDead)
             {
                 Debug.Log($"Крюк попал в монстра {gameObject.name} через коллайдер");
+                
+                // Воспроизводим звук попадания
+                PlayHitSound();
+                
                 monsterController.Die();
                 
                 // Отмечаем что крюк попал в монстра
@@ -135,6 +176,62 @@ public class MonsterHitbox : MonoBehaviour
             return boxCollider.bounds;
         }
         return new Bounds(transform.position, Vector3.zero);
+    }
+    
+    /// <summary>
+    /// Воспроизводит звук попадания в монстра
+    /// </summary>
+    void PlayHitSound()
+    {
+        if (hitSound == null)
+        {
+            Debug.LogWarning($"MonsterHitbox: hitSound не назначен для {gameObject.name}");
+            return;
+        }
+        
+        // Используем сохраненный AudioSource или ищем его
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = GetComponentInParent<AudioSource>();
+            }
+        }
+        
+        if (audioSource != null)
+        {
+            // Используем AudioSource (более надежный способ)
+            audioSource.PlayOneShot(hitSound, hitSoundVolume);
+            Debug.Log($"MonsterHitbox: Звук воспроизведен через AudioSource на {gameObject.name}");
+        }
+        else
+        {
+            // Если нет AudioSource, используем PlayClipAtPoint
+            // Используем позицию камеры для лучшей слышимости
+            Vector3 soundPos = transform.position;
+            Camera mainCam = Camera.main;
+            if (mainCam != null)
+            {
+                // Проверяем наличие AudioListener на камере
+                AudioListener listener = mainCam.GetComponent<AudioListener>();
+                if (listener == null)
+                {
+                    Debug.LogWarning("MonsterHitbox: На камере нет AudioListener! Звук может быть не слышен.");
+                }
+                
+                // Если монстр далеко от камеры, воспроизводим звук ближе к камере
+                float distance = Vector3.Distance(transform.position, mainCam.transform.position);
+                if (distance > 20f)
+                {
+                    // Воспроизводим звук на позиции камеры для лучшей слышимости
+                    soundPos = mainCam.transform.position;
+                }
+            }
+            
+            AudioSource.PlayClipAtPoint(hitSound, soundPos, hitSoundVolume);
+            Debug.Log($"MonsterHitbox: Звук воспроизведен через PlayClipAtPoint на позиции {soundPos}");
+        }
     }
 }
 

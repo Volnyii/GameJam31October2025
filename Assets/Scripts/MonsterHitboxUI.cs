@@ -8,9 +8,19 @@ using UnityEngine;
 [RequireComponent(typeof(BoxCollider2D))]
 public class MonsterHitboxUI : MonoBehaviour
 {
+    [Header("Audio")]
+    [Tooltip("Звук при попадании крюка в монстра")]
+    public AudioClip hitSound;
+    [Tooltip("Громкость звука попадания (0-1)")]
+    [Range(0f, 1f)]
+    public float hitSoundVolume = 1f;
+    [Tooltip("Автоматически создавать AudioSource если его нет")]
+    public bool autoCreateAudioSource = true;
+    
     private BoxCollider2D boxCollider;
     private MonsterUI monsterUI;
     private RectTransform rectTransform;
+    private AudioSource audioSource;
     
     void Awake()
     {
@@ -54,6 +64,33 @@ public class MonsterHitboxUI : MonoBehaviour
         
         // Автоматически устанавливаем размер коллайдера
         SetupColliderSize();
+        
+        // Настраиваем AudioSource если нужно
+        SetupAudioSource();
+    }
+    
+    /// <summary>
+    /// Настраивает AudioSource для воспроизведения звуков
+    /// </summary>
+    void SetupAudioSource()
+    {
+        if (autoCreateAudioSource)
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = GetComponentInParent<AudioSource>();
+            }
+            
+            if (audioSource == null)
+            {
+                // Создаем AudioSource на этом объекте
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0f; // 2D звук
+                audioSource.volume = 1f;
+            }
+        }
     }
     
     /// <summary>
@@ -98,6 +135,10 @@ public class MonsterHitboxUI : MonoBehaviour
             if (monsterUI != null && !monsterUI.IsDead)
             {
                 Debug.Log($"Крюк попал в монстра {gameObject.name} через коллайдер (UI)");
+                
+                // Воспроизводим звук попадания
+                PlayHitSound();
+                
                 monsterUI.Die();
                 
                 // Отмечаем что крюк попал в монстра
@@ -139,6 +180,55 @@ public class MonsterHitboxUI : MonoBehaviour
             return boxCollider.bounds;
         }
         return new Bounds(transform.position, Vector3.zero);
+    }
+    
+    /// <summary>
+    /// Воспроизводит звук попадания в монстра
+    /// </summary>
+    void PlayHitSound()
+    {
+        if (hitSound == null)
+        {
+            Debug.LogWarning($"MonsterHitboxUI: hitSound не назначен для {gameObject.name}");
+            return;
+        }
+        
+        // Используем сохраненный AudioSource или ищем его
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = GetComponentInParent<AudioSource>();
+            }
+        }
+        
+        if (audioSource != null)
+        {
+            // Используем AudioSource (более надежный способ)
+            audioSource.PlayOneShot(hitSound, hitSoundVolume);
+            Debug.Log($"MonsterHitboxUI: Звук воспроизведен через AudioSource на {gameObject.name}");
+        }
+        else
+        {
+            // Если нет AudioSource, используем PlayClipAtPoint
+            // Для UI элементов лучше воспроизводить звук на позиции камеры для лучшей слышимости
+            Camera mainCam = Camera.main;
+            Vector3 soundPos = mainCam != null ? mainCam.transform.position : Vector3.zero;
+            
+            // Проверяем наличие AudioListener на камере
+            if (mainCam != null)
+            {
+                AudioListener listener = mainCam.GetComponent<AudioListener>();
+                if (listener == null)
+                {
+                    Debug.LogWarning("MonsterHitboxUI: На камере нет AudioListener! Звук может быть не слышен.");
+                }
+            }
+            
+            AudioSource.PlayClipAtPoint(hitSound, soundPos, hitSoundVolume);
+            Debug.Log($"MonsterHitboxUI: Звук воспроизведен через PlayClipAtPoint на позиции камеры {soundPos}");
+        }
     }
 }
 

@@ -165,3 +165,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7bd08ac4400564fa489441b7a45fb173, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  hitSound: {fileID: 8300000, guid: 74ba1e8d300a34d5ebc58cb36d811c51, type: 3}
+  hitSoundVolume: 0.8
