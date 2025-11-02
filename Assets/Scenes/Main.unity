@@ -670,7 +670,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   folderName: Mob0
-  newVideoName: idle
+  newVideoName: attack
   isOnceAnim: 0
   muteForWebGLAutoplay: 1
   defaultDesktopExtension: .webm
@@ -2613,7 +2613,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2081808925}
   m_Layer: 0
-  m_Name: CutScene
+  m_Name: CutSceneObjects
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
