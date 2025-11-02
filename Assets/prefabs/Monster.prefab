@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 203568168879513657}
   - component: {fileID: 6153391233168237454}
   - component: {fileID: -5626836722199640342}
+  - component: {fileID: 3976507109987102175}
   m_Layer: 0
   m_Name: Monster
   m_TagString: Untagged
@@ -79,12 +80,12 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 4
-  m_Sprite: {fileID: 21300000, guid: 63a935b59fca04875b7424a2ffb96f00, type: 3}
+  m_Sprite: {fileID: -4004504175112216542, guid: 82951bc94d4644d8396eb04484d5ab68, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 1
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 444, y: 449}
+  m_Size: {x: 2.5, y: 2.5}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -106,6 +107,8 @@ MonoBehaviour:
   patrolRadius: 5
   centerPosition: {x: 0, y: 0}
   enableScreenWrap: 1
+  lockYPosition: 0
+  fixedY: 0
   animatorControllers: []
 --- !u!61 &6153391233168237454
 BoxCollider2D:
@@ -144,9 +147,9 @@ BoxCollider2D:
   m_Offset: {x: 0, y: 224.5}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.5, y: 0}
-    oldSize: {x: 444, y: 449}
-    newSize: {x: 444, y: 449}
+    pivot: {x: 0.5, y: 0.5}
+    oldSize: {x: 2.5, y: 2.5}
+    newSize: {x: 2.5, y: 2.5}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
     adaptiveTiling: 0
@@ -167,3 +170,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hitSound: {fileID: 8300000, guid: 74ba1e8d300a34d5ebc58cb36d811c51, type: 3}
   hitSoundVolume: 0.8
+  autoCreateAudioSource: 1
+--- !u!114 &3976507109987102175
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 138880326058325880}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ecceb45930dd41638de469ed2d35a9fb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  folderName: Mob1
+  newVideoName: run
+  isOnceAnim: 0
+  muteForWebGLAutoplay: 1
+  defaultDesktopExtension: .webm
