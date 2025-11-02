@@ -44,6 +44,9 @@ public class MonsterSpawnerUI : MonoBehaviour
     // Словарь для быстрого поиска типа монстра по GameObject
     private Dictionary<GameObject, GameObject> monsterTypeMap = new Dictionary<GameObject, GameObject>();
     
+    // Флаг блокировки спавна (для победы)
+    private bool isSpawningBlocked = false;
+    
     public List<GameObject> ActiveMonsters => activeMonsters;
     
     /// <summary>
@@ -629,7 +632,10 @@ public class MonsterSpawnerUI : MonoBehaviour
             // Если тип не определен, уничтожаем монстра
             Debug.LogWarning($"ReturnMonster: не найден тип монстра для {monster.name}, уничтожаю");
             Destroy(monster);
-            StartCoroutine(SpawnMonsterDelayed());
+            if (!isSpawningBlocked)
+            {
+                StartCoroutine(SpawnMonsterDelayed());
+            }
             return;
         }
         
@@ -638,7 +644,29 @@ public class MonsterSpawnerUI : MonoBehaviour
         // Обновляем счетчик активных монстров для типа
         UpdateActiveCounts();
         
-        StartCoroutine(SpawnMonsterDelayed());
+        // Не спавним нового монстра если спавн заблокирован
+        if (!isSpawningBlocked)
+        {
+            StartCoroutine(SpawnMonsterDelayed());
+        }
+    }
+    
+    /// <summary>
+    /// Останавливает спавн новых монстров
+    /// </summary>
+    public void StopSpawning()
+    {
+        isSpawningBlocked = true;
+        Debug.Log("MonsterSpawnerUI: Спавн остановлен");
+    }
+    
+    /// <summary>
+    /// Возобновляет спавн новых монстров
+    /// </summary>
+    public void ResumeSpawning()
+    {
+        isSpawningBlocked = false;
+        Debug.Log("MonsterSpawnerUI: Спавн возобновлен");
     }
     
     /// <summary>
@@ -658,7 +686,10 @@ public class MonsterSpawnerUI : MonoBehaviour
     System.Collections.IEnumerator SpawnMonsterDelayed()
     {
         yield return new WaitForSeconds(1f);
-        SpawnMonster();
+        if (!isSpawningBlocked)
+        {
+            SpawnMonster();
+        }
     }
     
     [ContextMenu("Cycle Monster Animations")]
