@@ -168,7 +168,7 @@ public class HookController : MonoBehaviour
             Material lineMaterial = null;
             
             // Попробуем несколько вариантов шейдеров
-            string[] shaderNames = { "Unlit/Color", "Sprites/Default", "Legacy Shaders/Transparent/Diffuse", "Standard" };
+            string[] shaderNames = { "Unlit/Color", "Sprites/Default", "Standard" };
             Shader foundShader = null;
             
             foreach (string shaderName in shaderNames)
@@ -220,24 +220,7 @@ public class HookController : MonoBehaviour
                 }
                 
                 // Если всё равно не получилось, создаем материал без шейдера (будет использоваться дефолтный)
-                if (lineRenderer != null && lineRenderer.material == null)
-                {
-                    Debug.LogWarning("Не удалось создать материал для LineRenderer, используем дефолтный");
-                    try
-                    {
-                        Shader diffuseShader = Shader.Find("Legacy Shaders/Diffuse");
-                        if (diffuseShader != null)
-                        {
-                            lineRenderer.material = new Material(diffuseShader);
-                        }
-                    }
-                    catch (System.Exception e)
-                    {
-                        Debug.LogError($"Ошибка при создании Diffuse материала: {e.Message}");
-                    }
-                }
-                
-                // Если и это не сработало, пробуем вообще без материала (цвет будет использоваться через startColor/endColor)
+                // Если не удалось создать материал, пробуем вообще без материала (цвет будет использоваться через startColor/endColor)
                 if (lineRenderer != null && lineRenderer.material == null)
                 {
                     Debug.LogError("КРИТИЧНО: Не удалось создать материал для LineRenderer! Цепь может не отображаться!");

@@ -216,17 +216,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 39304153649f24479b0ec3cad87c693b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  monsterCount: 5
+  monsterCount: 10
   spawnRadius: 6
   castleCenter: {x: 0, y: 0}
   groundLevel: 0
+  spawnLaneY:
+  - -10
+  - -9
+  - -8
+  showLaneGizmos: 1
+  laneGizmoColor: {r: 1, g: 0, b: 0, a: 0.5}
+  laneGizmoLength: 20
   monsterTypes:
   - monsterPrefab: {fileID: 138880326058325880, guid: e2fd9013a03d04386996e23b09848f65, type: 3}
     monsterTypeName: daemon
     spawnWeight: 2
     poolMinSize: 4
     activeCount: 0
-  monsterPrefab: {fileID: 0}
   availableAnimators: []
 --- !u!4 &376893373
 Transform:

@@ -115,15 +115,7 @@ public class MonsterPoolSetupHelper : MonoBehaviour
         
         if (spawner.monsterTypes == null || spawner.monsterTypes.Length == 0)
         {
-            Debug.LogWarning("⚠ Массив типов монстров пуст! Используется старый способ (monsterPrefab)");
-            if (spawner.monsterPrefab == null)
-            {
-                Debug.LogError("❌ Префаб монстра тоже не назначен!");
-            }
-            else
-            {
-                Debug.Log($"✓ Используется одиночный префаб: {spawner.monsterPrefab.name}");
-            }
+            Debug.LogError("❌ Массив типов монстров пуст! Добавьте хотя бы один MonsterPoolData через автоматическую настройку.");
             return;
         }
         

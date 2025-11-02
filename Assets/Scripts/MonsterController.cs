@@ -11,6 +11,10 @@ public class MonsterController : MonoBehaviour
     public float patrolRadius = 5f;
     public Vector2 centerPosition = Vector2.zero;
     public bool enableScreenWrap = true;
+    [Tooltip("Закреплять Y координату на одной линии (если false, монстр может двигаться по своей полосе)")]
+    public bool lockYPosition = false;
+    [Tooltip("Y координата для фиксации (используется только если lockYPosition = true)")]
+    public float fixedY = 0f;
     
     [Header("Animation")]
     public RuntimeAnimatorController[] animatorControllers;
@@ -92,8 +96,11 @@ public class MonsterController : MonoBehaviour
     {
         if (isDead) return;
         
-        // Убеждаемся что монстр на нижней границе камеры
-        MaintainBottomPosition();
+        // Убеждаемся что монстр на фиксированной Y позиции (только если включено)
+        if (lockYPosition)
+        {
+            MaintainFixedYPosition();
+        }
         
         MoveTowardsTarget();
         
@@ -105,23 +112,12 @@ public class MonsterController : MonoBehaviour
     }
     
     /// <summary>
-    /// Поддерживает позицию монстра на нижней границе камеры
+    /// Поддерживает позицию монстра на фиксированной Y координате (только если lockYPosition = true)
     /// </summary>
-    void MaintainBottomPosition()
+    void MaintainFixedYPosition()
     {
-        if (mainCamera == null)
-        {
-            mainCamera = Camera.main;
-            if (mainCamera == null) return;
-        }
-        
-        // Вычисляем нижнюю границу камеры
-        float screenHeight = 2f * mainCamera.orthographicSize;
-        float bottomY = mainCamera.transform.position.y - screenHeight / 2f;
-        
-        // Устанавливаем Y на нижнюю границу, сохраняя X
         Vector3 pos = transform.position;
-        pos.y = bottomY;
+        pos.y = fixedY;
         transform.position = pos;
     }
     
@@ -129,18 +125,31 @@ public class MonsterController : MonoBehaviour
     {
         if (spriteRenderer == null) return;
         
-        // Движение только по горизонтали, Y всегда на нижней границе камеры
         Vector3 currentPos = transform.position;
         Vector3 targetPos = currentTarget;
         
-        // Двигаемся только по X, Y остается на нижней границе
+        // Двигаемся к цели с учетом скорости
+        // Двигаемся по X к цели
         currentPos.x = Mathf.MoveTowards(currentPos.x, targetPos.x, moveSpeed * Time.deltaTime);
         
-        // Поддерживаем Y на нижней границе камеры
-        if (mainCamera != null)
+        // Двигаемся по Y к цели (только если Y не заблокирован)
+        if (!lockYPosition)
         {
-            float screenHeight = 2f * mainCamera.orthographicSize;
-            currentPos.y = mainCamera.transform.position.y - screenHeight / 2f;
+            currentPos.y = Mathf.MoveTowards(currentPos.y, targetPos.y, moveSpeed * Time.deltaTime);
+            
+            // Ограничиваем отклонение по Y от центра полосы (±0.5 единицы от centerPosition.y)
+            if (centerPosition.y != 0)
+            {
+                float maxDeviation = 0.5f;
+                float minY = centerPosition.y - maxDeviation;
+                float maxY = centerPosition.y + maxDeviation;
+                currentPos.y = Mathf.Clamp(currentPos.y, minY, maxY);
+            }
+        }
+        else
+        {
+            // Если Y заблокирован, используем фиксированную позицию
+            currentPos.y = fixedY;
         }
         
         transform.position = currentPos;
@@ -167,8 +176,11 @@ public class MonsterController : MonoBehaviour
         }
         
         // Если достигли цели или очень близко, выбираем новую
-        float distanceToTarget = Mathf.Abs(transform.position.x - currentTarget.x);
-        if (distanceToTarget < 0.2f)
+        float distanceX = Mathf.Abs(transform.position.x - currentTarget.x);
+        float distanceY = Mathf.Abs(transform.position.y - currentTarget.y);
+        float totalDistance = Mathf.Sqrt(distanceX * distanceX + distanceY * distanceY);
+        
+        if (totalDistance < 0.3f) // Порог в мировых единицах (общее расстояние)
         {
             SetRandomTarget();
         }
@@ -188,23 +200,22 @@ public class MonsterController : MonoBehaviour
         
         float leftBound = mainCamera.transform.position.x - screenWidth / 2f;
         float rightBound = mainCamera.transform.position.x + screenWidth / 2f;
-        float bottomY = mainCamera.transform.position.y - screenHeight / 2f;
         
         Vector3 pos = transform.position;
         
-        // Если монстр вышел за левый край - появляется справа
+        // Если монстр вышел за левый край - появляется справа (на той же Y позиции)
         if (pos.x < leftBound)
         {
             pos.x = rightBound - 0.5f; // Немного отступ от края
-            pos.y = bottomY; // Поддерживаем нижнюю границу
+            // Сохраняем Y позицию (не сбрасываем на bottomY)
             transform.position = pos;
             SetRandomTarget();
         }
-        // Если монстр вышел за правый край - появляется слева
+        // Если монстр вышел за правый край - появляется слева (на той же Y позиции)
         else if (pos.x > rightBound)
         {
             pos.x = leftBound + 0.5f; // Немного отступ от края
-            pos.y = bottomY; // Поддерживаем нижнюю границу
+            // Сохраняем Y позицию (не сбрасываем на bottomY)
             transform.position = pos;
             SetRandomTarget();
         }
@@ -212,13 +223,22 @@ public class MonsterController : MonoBehaviour
     
     void SetRandomTarget()
     {
+        float targetY;
+        float randomX;
+        
         if (mainCamera == null)
         {
             mainCamera = Camera.main;
             if (mainCamera == null)
             {
-                // Если камера не найдена, используем простую позицию
-                currentTarget = new Vector3(transform.position.x + Random.Range(-5f, 5f), transform.position.y, 0);
+                // Если камера не найдена, используем простую позицию относительно центра патрулирования
+                randomX = centerPosition.x != 0 ? centerPosition.x + Random.Range(-patrolRadius, patrolRadius) : transform.position.x + Random.Range(-5f, 5f);
+                targetY = lockYPosition ? fixedY : transform.position.y;
+                if (!lockYPosition && centerPosition.y != 0)
+                {
+                    targetY = centerPosition.y + Random.Range(-0.3f, 0.3f);
+                }
+                currentTarget = new Vector3(randomX, targetY, 0);
                 return;
             }
         }
@@ -228,11 +248,22 @@ public class MonsterController : MonoBehaviour
         float screenWidth = screenHeight * mainCamera.aspect;
         float leftBound = mainCamera.transform.position.x - screenWidth / 2f;
         float rightBound = mainCamera.transform.position.x + screenWidth / 2f;
-        float bottomY = mainCamera.transform.position.y - screenHeight / 2f;
         
-        // Выбираем случайную точку по горизонтали на нижней границе камеры
-        float randomX = Random.Range(leftBound + 1f, rightBound - 1f);
-        currentTarget = new Vector3(randomX, bottomY, 0);
+        // Используем текущую Y позицию монстра (для патрулирования на своей полосе)
+        // Если Y заблокирован, используем фиксированную позицию
+        targetY = lockYPosition ? fixedY : transform.position.y;
+        
+        // Если Y не заблокирован, добавляем небольшую вариацию (±0.3 единицы от центра патрулирования)
+        // Используем centerPosition.y как центр полосы, если он установлен
+        if (!lockYPosition)
+        {
+            float laneCenterY = centerPosition.y != 0 ? centerPosition.y : transform.position.y;
+            targetY = laneCenterY + Random.Range(-0.3f, 0.3f);
+        }
+        
+        // Выбираем случайную точку по горизонтали на текущей полосе монстра
+        randomX = Random.Range(leftBound + 1f, rightBound - 1f);
+        currentTarget = new Vector3(randomX, targetY, 0);
     }
     
     public void SetAnimatorController(int index)

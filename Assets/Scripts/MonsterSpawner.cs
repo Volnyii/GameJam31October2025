@@ -19,13 +19,19 @@ public class MonsterSpawner : MonoBehaviour
     [Tooltip("Уровень земли (Y координата)")]
     public float groundLevel = 0f;
     
+    [Header("Spawn Lanes (Полосы спавна монстров)")]
+    [Tooltip("Y координаты трех полос для спавна монстров (в мировых координатах)")]
+    public float[] spawnLaneY = new float[3] { -2f, 0f, 2f };
+    [Tooltip("Показывать визуализацию полос в редакторе")]
+    public bool showLaneGizmos = true;
+    [Tooltip("Цвет визуализации полос (только в редакторе)")]
+    public Color laneGizmoColor = new Color(1f, 0f, 0f, 0.5f);
+    [Tooltip("Длина линии визуализации полосы")]
+    public float laneGizmoLength = 20f;
+    
     [Header("Monster Pool System")]
     [Tooltip("Массив типов монстров (можно задать разные префабы)")]
     public MonsterPoolData[] monsterTypes = new MonsterPoolData[0];
-    
-    [Header("Legacy Support (для обратной совместимости)")]
-    [Tooltip("Старый способ - один префаб (если массив типов пуст)")]
-    public GameObject monsterPrefab;
     
     [Header("Monster Pools")]
     [Tooltip("Доступные аниматоры (применяются ко всем типам монстров)")]
@@ -36,13 +42,41 @@ public class MonsterSpawner : MonoBehaviour
     // Пул для каждого типа монстра отдельно
     private Dictionary<GameObject, Queue<GameObject>> monsterPools = new Dictionary<GameObject, Queue<GameObject>>();
     
-    // Пул для программно созданных монстров (когда prefab == null)
-    private Queue<GameObject> programmaticMonsterPool = new Queue<GameObject>();
-    
     // Словарь для быстрого поиска типа монстра по GameObject
     private Dictionary<GameObject, GameObject> monsterTypeMap = new Dictionary<GameObject, GameObject>();
     
     public List<GameObject> ActiveMonsters => activeMonsters;
+    
+    /// <summary>
+    /// Проверяет и исправляет настройки полос при изменении в редакторе
+    /// </summary>
+    void OnValidate()
+    {
+        // Убеждаемся, что массив полос содержит ровно 3 элемента
+        if (spawnLaneY == null || spawnLaneY.Length != 3)
+        {
+            float[] newLanes = new float[3];
+            if (spawnLaneY != null && spawnLaneY.Length > 0)
+            {
+                // Копируем существующие значения
+                for (int i = 0; i < 3 && i < spawnLaneY.Length; i++)
+                {
+                    newLanes[i] = spawnLaneY[i];
+                }
+                // Заполняем недостающие значения
+                for (int i = spawnLaneY.Length; i < 3; i++)
+                {
+                    newLanes[i] = groundLevel + (i - 1) * 2f;
+                }
+            }
+            else
+            {
+                // Дефолтные значения (относительно groundLevel)
+                newLanes = new float[3] { groundLevel - 2f, groundLevel, groundLevel + 2f };
+            }
+            spawnLaneY = newLanes;
+        }
+    }
     
     void Awake()
     {
@@ -72,33 +106,7 @@ public class MonsterSpawner : MonoBehaviour
         // Проверяем, есть ли типы монстров
         if (monsterTypes == null || monsterTypes.Length == 0)
         {
-            // Если нет, используем старый способ с одним префабом
-            if (monsterPrefab != null)
-            {
-                Queue<GameObject> pool = new Queue<GameObject>();
-                monsterPools[monsterPrefab] = pool;
-                
-                // Создаем предварительные объекты для пула
-                for (int i = 0; i < 3; i++)
-                {
-                    GameObject precreated = CreateMonsterFromPrefab(monsterPrefab);
-                    // Убеждаемся что масштаб из префаба сохранен
-                    precreated.transform.localScale = monsterPrefab.transform.localScale;
-                    precreated.SetActive(false);
-                    pool.Enqueue(precreated);
-                }
-            }
-            else
-            {
-                // Если префаба нет, создаем программно созданных монстров для пула
-                for (int i = 0; i < 3; i++)
-                {
-                    GameObject precreated = CreateMonsterFromPrefab(null);
-                    precreated.SetActive(false);
-                    programmaticMonsterPool.Enqueue(precreated);
-                }
-                Debug.Log("✓ Пул программно созданных монстров инициализирован: 3 объекта");
-            }
+            Debug.LogWarning("MonsterSpawner: массив monsterTypes пуст! Добавьте хотя бы один MonsterPoolData.");
             return;
         }
         
@@ -165,8 +173,7 @@ public class MonsterSpawner : MonoBehaviour
             return validTypes[validTypes.Length - 1].monsterPrefab;
         }
         
-        // Иначе используем старый способ (может быть null - это нормально)
-        return monsterPrefab;
+        return null;
     }
     
     GameObject SpawnMonster()
@@ -198,12 +205,6 @@ public class MonsterSpawner : MonoBehaviour
                 monster.SetActive(true);
             }
         }
-        else if (prefab == null && programmaticMonsterPool.Count > 0)
-        {
-            // Берем программно созданного монстра из пула
-            monster = programmaticMonsterPool.Dequeue();
-            monster.SetActive(true);
-        }
         
         // Если в пуле нет, создаем новый
         if (monster == null)
@@ -228,19 +229,42 @@ public class MonsterSpawner : MonoBehaviour
         }
         
         // Устанавливаем позицию на окружности вокруг замка (в мировых координатах)
+        // Монстры распределяются между тремя полосами по Y
         float angleStep = 360f / monsterCount;
         int currentIndex = activeMonsters.Count;
         float angle = (angleStep * currentIndex + Random.Range(-20f, 20f)) * Mathf.Deg2Rad;
         
+        // Выбираем полосу для этого монстра (равномерное распределение)
+        // Убеждаемся, что массив полос инициализирован
+        if (spawnLaneY == null || spawnLaneY.Length == 0)
+        {
+            // Если массив не инициализирован, используем дефолтные значения
+            spawnLaneY = new float[3] { groundLevel - 2f, groundLevel, groundLevel + 2f };
+        }
+        
+        int laneIndex = currentIndex % spawnLaneY.Length;
+        float laneY = spawnLaneY[laneIndex];
+        
+        // Добавляем небольшую случайную вариацию по Y в пределах полосы (±0.3 единицы)
+        float laneYWithVariation = laneY + Random.Range(-0.3f, 0.3f);
+        
         Vector3 position = new Vector3(
             castleCenter.x + Mathf.Cos(angle) * spawnRadius,
-            groundLevel + Mathf.Sin(angle) * spawnRadius * 0.3f,
+            laneYWithVariation,
             0
         );
         
-        monsterController.transform.position = position;
-        monsterController.centerPosition = castleCenter;
+        // Проверяем минимальное расстояние от игрока и крюка
+        Vector3 safePosition = GetSafeSpawnPosition(position);
+        
+        monsterController.transform.position = safePosition;
+        // Устанавливаем Y центр на полосе
+        monsterController.centerPosition = new Vector2(castleCenter.x, laneY);
         monsterController.patrolRadius = spawnRadius;
+        
+        // Устанавливаем фиксированную Y позицию на полосе (но не блокируем, чтобы монстр мог двигаться в пределах полосы)
+        monsterController.fixedY = laneY;
+        monsterController.lockYPosition = false; // Не блокируем Y, чтобы монстр мог патрулировать по своей полосе
         
         if (availableAnimators != null && availableAnimators.Length > 0)
         {
@@ -264,9 +288,130 @@ public class MonsterSpawner : MonoBehaviour
             if (type != null) monsterTypeName = type.monsterTypeName;
         }
         
-        Debug.Log($"Спавн монстра #{currentIndex + 1} (тип: {monsterTypeName}) на позиции {position}, всего активных: {activeMonsters.Count}");
+        Debug.Log($"Спавн монстра #{currentIndex + 1} (тип: {monsterTypeName}) на позиции {safePosition}, полоса {laneIndex + 1} (Y={laneY:F2}), всего активных: {activeMonsters.Count}");
         
         return monster;
+    }
+    
+    /// <summary>
+    /// Рисует визуализацию полос в редакторе
+    /// </summary>
+    void OnDrawGizmos()
+    {
+        if (!showLaneGizmos || spawnLaneY == null || spawnLaneY.Length == 0) return;
+        
+        // Рисуем линии полос
+        for (int i = 0; i < spawnLaneY.Length && i < 3; i++)
+        {
+            float laneY = spawnLaneY[i];
+            
+            // Определяем точки полосы (горизонтальные линии)
+            Vector3 leftPoint = new Vector3(castleCenter.x - laneGizmoLength * 0.5f, laneY, 0);
+            Vector3 rightPoint = new Vector3(castleCenter.x + laneGizmoLength * 0.5f, laneY, 0);
+            Vector3 centerPoint = new Vector3(castleCenter.x, laneY, 0);
+            
+            // Рисуем линию полосы
+            Color lineColor = i == 0 ? new Color(1f, 0f, 0f, 0.7f) : 
+                              i == 1 ? new Color(0f, 1f, 0f, 0.7f) : 
+                              new Color(0f, 0f, 1f, 0.7f);
+            Gizmos.color = lineColor;
+            Gizmos.DrawLine(leftPoint, rightPoint);
+            
+            // Рисуем точки на концах полосы
+            Gizmos.DrawSphere(leftPoint, 0.15f);
+            Gizmos.DrawSphere(rightPoint, 0.15f);
+            
+            // Рисуем центральную точку полосы (у замка) - более яркая
+            Color centerColor = i == 0 ? Color.red : i == 1 ? Color.green : Color.blue;
+            Gizmos.color = centerColor;
+            Gizmos.DrawSphere(centerPoint, 0.25f);
+            
+            // Рисуем маркер номера полосы
+            Gizmos.color = new Color(centerColor.r, centerColor.g, centerColor.b, 1f);
+            Gizmos.DrawWireSphere(centerPoint, 0.35f);
+        }
+    }
+    
+    /// <summary>
+    /// Получает безопасную позицию для спавна, избегая игрока и крюка
+    /// </summary>
+    Vector3 GetSafeSpawnPosition(Vector3 originalPosition)
+    {
+        const float minDistanceFromPlayer = 3f; // Минимальное расстояние от игрока в мировых единицах
+        const float minDistanceFromHook = 2f; // Минимальное расстояние от крюка в мировых единицах
+        const int maxAttempts = 10; // Максимальное количество попыток найти безопасную позицию
+        
+        Vector3 safePos = originalPosition;
+        
+        // Получаем позиции игрока и крюка
+        Vector3 playerPos = Vector3.zero;
+        Vector3 hookPos = Vector3.zero;
+        
+        // Ищем игрока (SpriteRenderer версия)
+        CastlePlayerUI player = FindObjectOfType<CastlePlayerUI>();
+        if (player != null)
+        {
+            SpriteRenderer playerSpriteRenderer = player.GetComponent<SpriteRenderer>();
+            if (playerSpriteRenderer != null)
+            {
+                playerPos = player.transform.position;
+            }
+        }
+        
+        // Ищем крюк (SpriteRenderer версия)
+        HookController hook = FindObjectOfType<HookController>();
+        if (hook != null)
+        {
+            hookPos = hook.transform.position;
+        }
+        
+        // Проверяем расстояние и корректируем если нужно
+        float distanceToPlayer = Vector3.Distance(safePos, playerPos);
+        float distanceToHook = Vector3.Distance(safePos, hookPos);
+        
+        int attempts = 0;
+        while ((distanceToPlayer < minDistanceFromPlayer || distanceToHook < minDistanceFromHook) && attempts < maxAttempts)
+        {
+            // Сдвигаем позицию дальше от игрока/крюка
+            Vector3 directionAway = Vector3.zero;
+            
+            if (distanceToPlayer < minDistanceFromPlayer)
+            {
+                Vector3 dirFromPlayer = (safePos - playerPos).normalized;
+                if (dirFromPlayer.magnitude < 0.1f)
+                {
+                    // Если позиция слишком близко или совпадает, выбираем случайное направление
+                    float randomAngle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                    dirFromPlayer = new Vector3(Mathf.Cos(randomAngle), Mathf.Sin(randomAngle), 0);
+                }
+                directionAway += dirFromPlayer * (minDistanceFromPlayer - distanceToPlayer);
+            }
+            
+            if (distanceToHook < minDistanceFromHook)
+            {
+                Vector3 dirFromHook = (safePos - hookPos).normalized;
+                if (dirFromHook.magnitude < 0.1f)
+                {
+                    float randomAngle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                    dirFromHook = new Vector3(Mathf.Cos(randomAngle), Mathf.Sin(randomAngle), 0);
+                }
+                directionAway += dirFromHook * (minDistanceFromHook - distanceToHook);
+            }
+            
+            safePos += directionAway;
+            
+            // Обновляем расстояния
+            distanceToPlayer = Vector3.Distance(safePos, playerPos);
+            distanceToHook = Vector3.Distance(safePos, hookPos);
+            attempts++;
+        }
+        
+        if (attempts > 0)
+        {
+            Debug.Log($"Скорректирована позиция монстра (SpriteRenderer): было {originalPosition}, стало {safePos} (попыток: {attempts})");
+        }
+        
+        return safePos;
     }
     
     /// <summary>
@@ -354,20 +499,11 @@ public class MonsterSpawner : MonoBehaviour
         }
         else
         {
-            // Если тип не определен, пробуем найти по старому способу
-            if (monsterPrefab != null)
-            {
-                if (!monsterPools.ContainsKey(monsterPrefab))
-                {
-                    monsterPools[monsterPrefab] = new Queue<GameObject>();
-                }
-                monsterPools[monsterPrefab].Enqueue(monster);
-            }
-            else
-            {
-                // Если нет prefab, возвращаем в пул программно созданных
-                programmaticMonsterPool.Enqueue(monster);
-            }
+            // Если тип не определен, уничтожаем монстра
+            Debug.LogWarning($"ReturnMonster: не найден тип монстра для {monster.name}, уничтожаю");
+            Destroy(monster);
+            StartCoroutine(SpawnMonsterDelayed());
+            return;
         }
         
         monster.SetActive(false);

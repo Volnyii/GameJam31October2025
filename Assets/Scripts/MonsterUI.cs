@@ -19,6 +19,10 @@ public class MonsterUI : MonoBehaviour
     public float patrolRadius = 5f;
     public Vector2 centerPosition = Vector2.zero;
     public bool enableScreenWrap = true;
+    [Tooltip("Закреплять Y координату на одной линии (если false, монстр может двигаться по своей полосе)")]
+    public bool lockYPosition = false;
+    [Tooltip("Y координата для фиксации (используется только если lockYPosition = true)")]
+    public float fixedY = 100f;
     
     [Header("Animation")]
     public RuntimeAnimatorController[] animatorControllers;
@@ -121,8 +125,11 @@ public class MonsterUI : MonoBehaviour
     {
         if (isDead) return;
         
-        // Убеждаемся что монстр на нижней границе экрана
-        MaintainBottomPosition();
+        // Убеждаемся что монстр на фиксированной Y позиции (только если включено)
+        if (lockYPosition)
+        {
+            MaintainFixedYPosition();
+        }
         
         MoveTowardsTarget();
         
@@ -134,17 +141,14 @@ public class MonsterUI : MonoBehaviour
     }
     
     /// <summary>
-    /// Поддерживает позицию монстра на нижней границе экрана
+    /// Поддерживает позицию монстра на фиксированной Y координате (только если lockYPosition = true)
     /// </summary>
-    void MaintainBottomPosition()
+    void MaintainFixedYPosition()
     {
         if (rectTransform == null) return;
         
-        // Для Canvas в ScreenSpaceOverlay нижняя граница примерно 100-150 пикселей от низа
-        float bottomY = 100f; // Отступ от низа экрана в пикселях
-        
         Vector2 pos = rectTransform.anchoredPosition;
-        pos.y = bottomY;
+        pos.y = fixedY;
         rectTransform.anchoredPosition = pos;
     }
     
@@ -152,16 +156,34 @@ public class MonsterUI : MonoBehaviour
     {
         if (rectTransform == null) return;
         
-        // Движение только по горизонтали, Y всегда на нижней границе
         Vector2 currentPos = rectTransform.anchoredPosition;
         Vector2 targetPos = currentTarget;
         
-        // Двигаемся только по X, Y остается на нижней границе
+        // Двигаемся к цели с учетом скорости
         float pixelsPerSecond = moveSpeed * 100f; // 1 unit = 100px
+        
+        // Двигаемся по X к цели
         currentPos.x = Mathf.MoveTowards(currentPos.x, targetPos.x, pixelsPerSecond * Time.deltaTime);
         
-        // Поддерживаем Y на нижней границе экрана
-        currentPos.y = 100f; // Нижняя граница в пикселях
+        // Двигаемся по Y к цели (только если Y не заблокирован)
+        if (!lockYPosition)
+        {
+            currentPos.y = Mathf.MoveTowards(currentPos.y, targetPos.y, pixelsPerSecond * Time.deltaTime);
+            
+            // Ограничиваем отклонение по Y от центра полосы (±40px от centerPosition.y)
+            if (centerPosition.y != 0)
+            {
+                float maxDeviation = 40f;
+                float minY = centerPosition.y - maxDeviation;
+                float maxY = centerPosition.y + maxDeviation;
+                currentPos.y = Mathf.Clamp(currentPos.y, minY, maxY);
+            }
+        }
+        else
+        {
+            // Если Y заблокирован, используем фиксированную позицию
+            currentPos.y = fixedY;
+        }
         
         rectTransform.anchoredPosition = currentPos;
         
@@ -187,8 +209,11 @@ public class MonsterUI : MonoBehaviour
         }
         
         // Если достигли цели или очень близко, выбираем новую
-        float distanceToTarget = Mathf.Abs(rectTransform.anchoredPosition.x - currentTarget.x);
-        if (distanceToTarget < 20f) // Порог в пикселях
+        float distanceX = Mathf.Abs(rectTransform.anchoredPosition.x - currentTarget.x);
+        float distanceY = Mathf.Abs(rectTransform.anchoredPosition.y - currentTarget.y);
+        float totalDistance = Mathf.Sqrt(distanceX * distanceX + distanceY * distanceY);
+        
+        if (totalDistance < 30f) // Порог в пикселях (общее расстояние)
         {
             SetRandomTarget();
         }
@@ -203,23 +228,22 @@ public class MonsterUI : MonoBehaviour
         float screenWidth = 1080f; // Reference resolution width в пикселях
         float leftBound = -screenWidth / 2f;
         float rightBound = screenWidth / 2f;
-        float bottomY = 100f; // Нижняя граница экрана
         
         Vector2 pos = rectTransform.anchoredPosition;
         
-        // Если монстр вышел за левый край - появляется справа
+        // Если монстр вышел за левый край - появляется справа (на той же Y позиции)
         if (pos.x < leftBound)
         {
             pos.x = rightBound - 50f; // Немного отступ от края
-            pos.y = bottomY; // Поддерживаем нижнюю границу
+            // Сохраняем Y позицию (не сбрасываем на bottomY)
             rectTransform.anchoredPosition = pos;
             SetRandomTarget();
         }
-        // Если монстр вышел за правый край - появляется слева
+        // Если монстр вышел за правый край - появляется слева (на той же Y позиции)
         else if (pos.x > rightBound)
         {
             pos.x = leftBound + 50f; // Немного отступ от края
-            pos.y = bottomY; // Поддерживаем нижнюю границу
+            // Сохраняем Y позицию (не сбрасываем на bottomY)
             rectTransform.anchoredPosition = pos;
             SetRandomTarget();
         }
@@ -234,11 +258,22 @@ public class MonsterUI : MonoBehaviour
         float screenWidth = 1080f; // Reference resolution width в пикселях
         float leftBound = -screenWidth / 2f + 50f; // Отступ от краев
         float rightBound = screenWidth / 2f - 50f;
-        float bottomY = 100f; // Нижняя граница экрана в пикселях
         
-        // Выбираем случайную точку по горизонтали на нижней границе экрана
+        // Используем текущую Y позицию монстра (для патрулирования на своей полосе)
+        // Если Y заблокирован, используем фиксированную позицию
+        float targetY = lockYPosition ? fixedY : rectTransform.anchoredPosition.y;
+        
+        // Если Y не заблокирован, добавляем небольшую вариацию (±30px от центра патрулирования)
+        // Используем centerPosition.y как центр полосы, если он установлен
+        if (!lockYPosition)
+        {
+            float laneCenterY = centerPosition.y != 0 ? centerPosition.y : rectTransform.anchoredPosition.y;
+            targetY = laneCenterY + Random.Range(-30f, 30f);
+        }
+        
+        // Выбираем случайную точку по горизонтали на текущей полосе монстра
         float randomX = Random.Range(leftBound, rightBound);
-        currentTarget = new Vector2(randomX, bottomY);
+        currentTarget = new Vector2(randomX, targetY);
     }
     
     public void SetAnimatorController(int index)

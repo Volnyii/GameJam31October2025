@@ -17,13 +17,19 @@ public class MonsterSpawnerUI : MonoBehaviour
     [Tooltip("Центр замка (в единицах Canvas)")]
     public Vector2 castleCenter = Vector2.zero;
     
+    [Header("Spawn Lanes (Полосы спавна монстров)")]
+    [Tooltip("Y координаты трех полос для спавна монстров (в пикселях Canvas)")]
+    public float[] spawnLaneY = new float[3] { 200f, 400f, 600f };
+    [Tooltip("Показывать визуализацию полос в редакторе")]
+    public bool showLaneGizmos = true;
+    [Tooltip("Цвет визуализации полос (только в редакторе)")]
+    public Color laneGizmoColor = new Color(1f, 0f, 0f, 0.5f);
+    [Tooltip("Длина линии визуализации полосы")]
+    public float laneGizmoLength = 1000f;
+    
     [Header("Monster Pool System")]
     [Tooltip("Массив типов монстров (можно задать разные префабы)")]
     public MonsterPoolData[] monsterTypes = new MonsterPoolData[0];
-    
-    [Header("Legacy Support (для обратной совместимости)")]
-    [Tooltip("Старый способ - один префаб (если массив типов пуст)")]
-    public GameObject monsterPrefab;
     
     [Header("Monster Pools")]
     [Tooltip("Доступные аниматоры (применяются ко всем типам монстров)")]
@@ -39,6 +45,37 @@ public class MonsterSpawnerUI : MonoBehaviour
     private Dictionary<GameObject, GameObject> monsterTypeMap = new Dictionary<GameObject, GameObject>();
     
     public List<GameObject> ActiveMonsters => activeMonsters;
+    
+    /// <summary>
+    /// Проверяет и исправляет настройки полос при изменении в редакторе
+    /// </summary>
+    void OnValidate()
+    {
+        // Убеждаемся, что массив полос содержит ровно 3 элемента
+        if (spawnLaneY == null || spawnLaneY.Length != 3)
+        {
+            float[] newLanes = new float[3];
+            if (spawnLaneY != null && spawnLaneY.Length > 0)
+            {
+                // Копируем существующие значения
+                for (int i = 0; i < 3 && i < spawnLaneY.Length; i++)
+                {
+                    newLanes[i] = spawnLaneY[i];
+                }
+                // Заполняем недостающие значения
+                for (int i = spawnLaneY.Length; i < 3; i++)
+                {
+                    newLanes[i] = 200f + i * 200f;
+                }
+            }
+            else
+            {
+                // Дефолтные значения
+                newLanes = new float[3] { 200f, 400f, 600f };
+            }
+            spawnLaneY = newLanes;
+        }
+    }
     
     void Awake()
     {
@@ -74,22 +111,7 @@ public class MonsterSpawnerUI : MonoBehaviour
         // Проверяем, есть ли типы монстров
         if (monsterTypes == null || monsterTypes.Length == 0)
         {
-            // Если нет, используем старый способ с одним префабом
-            if (monsterPrefab != null)
-            {
-                Queue<GameObject> pool = new Queue<GameObject>();
-                monsterPools[monsterPrefab] = pool;
-                
-                // Создаем предварительные объекты для пула
-                for (int i = 0; i < 3; i++)
-                {
-                    GameObject precreated = CreateMonsterFromPrefab(monsterPrefab);
-                    // Убеждаемся что масштаб из префаба сохранен
-                    precreated.transform.localScale = monsterPrefab.transform.localScale;
-                    precreated.SetActive(false);
-                    pool.Enqueue(precreated);
-                }
-            }
+            Debug.LogWarning("MonsterSpawnerUI: массив monsterTypes пуст! Добавьте хотя бы один MonsterPoolData.");
             return;
         }
         
@@ -155,8 +177,7 @@ public class MonsterSpawnerUI : MonoBehaviour
             return validTypes[validTypes.Length - 1].monsterPrefab;
         }
         
-        // Иначе используем старый способ
-        return monsterPrefab;
+        return null;
     }
     
     GameObject SpawnMonster()
@@ -164,7 +185,7 @@ public class MonsterSpawnerUI : MonoBehaviour
         GameObject prefab = GetRandomMonsterPrefab();
         if (prefab == null)
         {
-            Debug.LogWarning("Не найден префаб монстра для спавна!");
+            Debug.LogError("Не найден префаб монстра для спавна! Убедитесь, что массив monsterTypes не пуст и все префабы назначены.");
             return null;
         }
         
@@ -216,22 +237,41 @@ public class MonsterSpawnerUI : MonoBehaviour
         }
         
         // Устанавливаем позицию на окружности вокруг замка
-        // Монстры ходят на уровне земли (y = 200px от низа экрана)
-        // Распределяем монстров равномерно по окружности
+        // Монстры распределяются между тремя полосами по Y
         float angleStep = 360f / monsterCount;
         int currentIndex = activeMonsters.Count;
         float angle = (angleStep * currentIndex + Random.Range(-20f, 20f)) * Mathf.Deg2Rad;
         
-        float groundLevel = 200f; // Уровень земли от низа Canvas
+        // Выбираем полосу для этого монстра (равномерное распределение)
+        // Убеждаемся, что массив полос инициализирован
+        if (spawnLaneY == null || spawnLaneY.Length == 0)
+        {
+            // Если массив не инициализирован, используем дефолтные значения
+            spawnLaneY = new float[3] { 200f, 400f, 600f };
+        }
+        
+        int laneIndex = currentIndex % spawnLaneY.Length;
+        float laneY = spawnLaneY[laneIndex];
+        
+        // Добавляем небольшую случайную вариацию по Y в пределах полосы (±30px)
+        float laneYWithVariation = laneY + Random.Range(-30f, 30f);
+        
         Vector2 position = new Vector2(
             castleCenter.x + Mathf.Cos(angle) * spawnRadius * 100f, // Масштаб: 1 unit = 100px
-            groundLevel + Mathf.Sin(angle) * spawnRadius * 30f // Небольшая вариация по Y
+            laneYWithVariation // Y координата из выбранной полосы
         );
         
-        monsterUI.Position = position;
+        // Проверяем минимальное расстояние от игрока и крюка
+        Vector2 safePosition = GetSafeSpawnPosition(position);
+        
+        monsterUI.Position = safePosition;
         // centerPosition должен быть в пикселях для Canvas (0,0 - центр Canvas)
-        monsterUI.centerPosition = new Vector2(castleCenter.x * 100f, 0f); // Конвертируем в пиксели
+        monsterUI.centerPosition = new Vector2(castleCenter.x * 100f, laneY); // Устанавливаем Y центр на полосе
         monsterUI.patrolRadius = spawnRadius;
+        
+        // Устанавливаем фиксированную Y позицию на полосе (но не блокируем, чтобы монстр мог двигаться в пределах полосы)
+        monsterUI.fixedY = laneY;
+        monsterUI.lockYPosition = false; // Не блокируем Y, чтобы монстр мог патрулировать по своей полосе
         
         // Убеждаемся что у монстра есть RectTransform и он правильно настроен
         RectTransform monsterRect = monster.GetComponent<RectTransform>();
@@ -276,9 +316,233 @@ public class MonsterSpawnerUI : MonoBehaviour
             if (type != null) monsterTypeName = type.monsterTypeName;
         }
         
-        Debug.Log($"Спавн монстра #{currentIndex + 1} (тип: {monsterTypeName}) на позиции {position}, всего активных: {activeMonsters.Count}");
+        Debug.Log($"Спавн монстра #{currentIndex + 1} (тип: {monsterTypeName}) на позиции {safePosition}, полоса {laneIndex + 1} (Y={laneY:F1}), всего активных: {activeMonsters.Count}");
         
         return monster;
+    }
+    
+    /// <summary>
+    /// Рисует визуализацию полос в редакторе
+    /// </summary>
+    void OnDrawGizmos()
+    {
+        if (!showLaneGizmos || spawnLaneY == null || spawnLaneY.Length == 0) return;
+        
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return;
+        
+        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+        if (canvasRect == null) return;
+        
+        Camera camera = canvas.worldCamera ?? Camera.main;
+        if (camera == null) return;
+        
+        // Получаем размеры Canvas
+        Vector2 canvasSize = canvasRect.sizeDelta;
+        float canvasWidth = canvasSize.x > 0 ? canvasSize.x : Screen.width;
+        
+        // Конвертируем Canvas координаты в мировые для визуализации
+        for (int i = 0; i < spawnLaneY.Length && i < 3; i++)
+        {
+            float laneY = spawnLaneY[i];
+            
+            // Определяем точки полосы в Canvas координатах
+            Vector2 canvasPointLeft = new Vector2(-canvasWidth * 0.5f, laneY);
+            Vector2 canvasPointRight = new Vector2(canvasWidth * 0.5f, laneY);
+            Vector2 canvasPointCenter = new Vector2(castleCenter.x * 100f, laneY);
+            
+            // Конвертируем в мировые координаты
+            Vector3 worldPointLeft = CanvasLocalToWorld(canvas, canvasPointLeft, camera);
+            Vector3 worldPointRight = CanvasLocalToWorld(canvas, canvasPointRight, camera);
+            Vector3 worldPointCenter = CanvasLocalToWorld(canvas, canvasPointCenter, camera);
+            
+            // Рисуем линию полосы
+            Color lineColor = i == 0 ? new Color(1f, 0f, 0f, 0.7f) : 
+                              i == 1 ? new Color(0f, 1f, 0f, 0.7f) : 
+                              new Color(0f, 0f, 1f, 0.7f);
+            Gizmos.color = lineColor;
+            Gizmos.DrawLine(worldPointLeft, worldPointRight);
+            
+            // Рисуем точки на концах полосы
+            Gizmos.DrawSphere(worldPointLeft, 0.15f);
+            Gizmos.DrawSphere(worldPointRight, 0.15f);
+            
+            // Рисуем центральную точку полосы (у замка) - более яркая
+            Color centerColor = i == 0 ? Color.red : i == 1 ? Color.green : Color.blue;
+            Gizmos.color = centerColor;
+            Gizmos.DrawSphere(worldPointCenter, 0.25f);
+            
+            // Рисуем маркер номера полосы (текст через Handles, но проще через сферу побольше)
+            Gizmos.color = new Color(centerColor.r, centerColor.g, centerColor.b, 1f);
+            Gizmos.DrawWireSphere(worldPointCenter, 0.35f);
+        }
+    }
+    
+    /// <summary>
+    /// Конвертирует локальную координату Canvas в мировую координату для визуализации
+    /// </summary>
+    Vector3 CanvasLocalToWorld(Canvas canvas, Vector2 localPosition, Camera camera)
+    {
+        if (canvas == null || camera == null) return Vector3.zero;
+        
+        RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+        if (canvasRect == null) return Vector3.zero;
+        
+        // Конвертируем локальную позицию Canvas в мировую позицию
+        // Для Screen Space - Overlay используем прямую конвертацию
+        if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+        {
+            // Для Screen Space Overlay конвертируем через экранные координаты
+            Vector2 screenPos = new Vector2(
+                Screen.width * 0.5f + localPosition.x,
+                Screen.height * 0.5f + localPosition.y
+            );
+            Vector3 worldPos = camera.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, 10f));
+            return worldPos;
+        }
+        else
+        {
+            // Для Screen Space - Camera или World Space используем RectTransform
+            Vector3[] corners = new Vector3[4];
+            canvasRect.GetWorldCorners(corners);
+            
+            // Получаем размеры Canvas в мировых единицах
+            float canvasWidth = Vector3.Distance(corners[0], corners[3]);
+            float canvasHeight = Vector3.Distance(corners[0], corners[1]);
+            
+            // Конвертируем localPosition в мировую позицию относительно углов Canvas
+            float normalizedX = (localPosition.x / canvasRect.sizeDelta.x) + 0.5f;
+            float normalizedY = (localPosition.y / canvasRect.sizeDelta.y) + 0.5f;
+            
+            Vector3 worldPos = Vector3.Lerp(
+                Vector3.Lerp(corners[0], corners[1], normalizedY),
+                Vector3.Lerp(corners[3], corners[2], normalizedY),
+                normalizedX
+            );
+            
+            return worldPos;
+        }
+    }
+    
+    /// <summary>
+    /// Получает безопасную позицию для спавна, избегая игрока и крюка
+    /// </summary>
+    Vector2 GetSafeSpawnPosition(Vector2 originalPosition)
+    {
+        const float minDistanceFromPlayer = 300f; // Минимальное расстояние от игрока в пикселях
+        const float minDistanceFromHook = 200f; // Минимальное расстояние от крюка в пикселях
+        const int maxAttempts = 10; // Максимальное количество попыток найти безопасную позицию
+        
+        Vector2 safePos = originalPosition;
+        
+        // Получаем позиции игрока и крюка в координатах Canvas
+        Vector2 playerPos = Vector2.zero;
+        Vector2 hookPos = Vector2.zero;
+        
+        // Ищем игрока (может быть UI или SpriteRenderer)
+        CastlePlayerUI player = FindObjectOfType<CastlePlayerUI>();
+        if (player != null)
+        {
+            // Проверяем наличие SpriteRenderer (игрок использует SpriteRenderer, а не UI)
+            SpriteRenderer playerSpriteRenderer = player.GetComponent<SpriteRenderer>();
+            if (playerSpriteRenderer != null)
+            {
+                // Игрок использует SpriteRenderer - конвертируем мировые координаты в Canvas координаты
+                Camera mainCam = Camera.main;
+                if (mainCam != null && parentCanvas != null)
+                {
+                    Vector3 worldPos = player.transform.position;
+                    Vector2 screenPos = mainCam.WorldToScreenPoint(worldPos);
+                    RectTransform canvasRect = parentCanvas.GetComponent<RectTransform>();
+                    RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                        canvasRect, screenPos, parentCanvas.worldCamera ?? mainCam, out playerPos);
+                }
+            }
+            else
+            {
+                // Игрок использует UI (RectTransform) - но CastlePlayerUI всегда использует SpriteRenderer теперь
+                // Этот код оставлен на случай, если где-то еще используется UI версия
+                RectTransform playerRect = player.GetComponent<RectTransform>();
+                if (playerRect != null)
+                {
+                    playerPos = playerRect.anchoredPosition;
+                }
+                else
+                {
+                    // Если нет RectTransform, значит это SpriteRenderer версия
+                    // Конвертируем мировые координаты
+                    Camera mainCam = Camera.main;
+                    if (mainCam != null && parentCanvas != null)
+                    {
+                        Vector3 worldPos = player.transform.position;
+                        Vector2 screenPos = mainCam.WorldToScreenPoint(worldPos);
+                        RectTransform canvasRect = parentCanvas.GetComponent<RectTransform>();
+                        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                            canvasRect, screenPos, parentCanvas.worldCamera ?? mainCam, out playerPos);
+                    }
+                }
+            }
+        }
+        
+        // Ищем крюк (UI версия)
+        HookUI hook = FindObjectOfType<HookUI>();
+        if (hook != null)
+        {
+            RectTransform hookRect = hook.GetComponent<RectTransform>();
+            if (hookRect != null)
+            {
+                hookPos = hookRect.anchoredPosition;
+            }
+        }
+        
+        // Проверяем расстояние и корректируем если нужно
+        float distanceToPlayer = Vector2.Distance(safePos, playerPos);
+        float distanceToHook = Vector2.Distance(safePos, hookPos);
+        
+        int attempts = 0;
+        while ((distanceToPlayer < minDistanceFromPlayer || distanceToHook < minDistanceFromHook) && attempts < maxAttempts)
+        {
+            // Сдвигаем позицию дальше от игрока/крюка
+            Vector2 directionAway = Vector2.zero;
+            
+            if (distanceToPlayer < minDistanceFromPlayer)
+            {
+                Vector2 dirFromPlayer = (safePos - playerPos).normalized;
+                if (dirFromPlayer.magnitude < 0.1f)
+                {
+                    // Если позиция слишком близко или совпадает, выбираем случайное направление
+                    float randomAngle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                    dirFromPlayer = new Vector2(Mathf.Cos(randomAngle), Mathf.Sin(randomAngle));
+                }
+                directionAway += dirFromPlayer * (minDistanceFromPlayer - distanceToPlayer);
+            }
+            
+            if (distanceToHook < minDistanceFromHook)
+            {
+                Vector2 dirFromHook = (safePos - hookPos).normalized;
+                if (dirFromHook.magnitude < 0.1f)
+                {
+                    float randomAngle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                    dirFromHook = new Vector2(Mathf.Cos(randomAngle), Mathf.Sin(randomAngle));
+                }
+                directionAway += dirFromHook * (minDistanceFromHook - distanceToHook);
+            }
+            
+            safePos += directionAway;
+            
+            // Обновляем расстояния
+            distanceToPlayer = Vector2.Distance(safePos, playerPos);
+            distanceToHook = Vector2.Distance(safePos, hookPos);
+            attempts++;
+        }
+        
+        if (attempts > 0)
+        {
+            Debug.Log($"Скороректирована позиция монстра: было {originalPosition}, стало {safePos} (попыток: {attempts})");
+        }
+        
+        return safePos;
     }
     
     /// <summary>
@@ -362,22 +626,11 @@ public class MonsterSpawnerUI : MonoBehaviour
         }
         else
         {
-            // Если тип не определен, пробуем найти по старому способу
-            if (monsterPrefab != null)
-            {
-                if (!monsterPools.ContainsKey(monsterPrefab))
-                {
-                    monsterPools[monsterPrefab] = new Queue<GameObject>();
-                }
-                monsterPools[monsterPrefab].Enqueue(monster);
-            }
-            else
-            {
-                // Если нет пула, просто деактивируем
-                Destroy(monster);
-                StartCoroutine(SpawnMonsterDelayed());
-                return;
-            }
+            // Если тип не определен, уничтожаем монстра
+            Debug.LogWarning($"ReturnMonster: не найден тип монстра для {monster.name}, уничтожаю");
+            Destroy(monster);
+            StartCoroutine(SpawnMonsterDelayed());
+            return;
         }
         
         monster.SetActive(false);

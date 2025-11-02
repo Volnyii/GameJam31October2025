@@ -600,23 +600,17 @@ public class CastleSceneSetupUI : MonoBehaviour
         spawner.monsterCount = 5;
         spawner.spawnRadius = 6f;
         
-        // Назначаем префаб монстра если он указан в setup (для обратной совместимости)
-        if (monsterPrefab != null && spawner.monsterPrefab == null)
+        // Если массив типов пуст и указан префаб в setup, создаем один тип из префаба
+        if (monsterPrefab != null && (spawner.monsterTypes == null || spawner.monsterTypes.Length == 0))
         {
-            spawner.monsterPrefab = monsterPrefab;
-            
-            // Если массив типов пуст, создаем один тип из старого префаба
-            if (spawner.monsterTypes == null || spawner.monsterTypes.Length == 0)
+            spawner.monsterTypes = new MonsterPoolData[1];
+            spawner.monsterTypes[0] = new MonsterPoolData
             {
-                spawner.monsterTypes = new MonsterPoolData[1];
-                spawner.monsterTypes[0] = new MonsterPoolData
-                {
-                    monsterPrefab = monsterPrefab,
-                    monsterTypeName = "Default Monster",
-                    spawnWeight = 1,
-                    poolMinSize = 2
-                };
-            }
+                monsterPrefab = monsterPrefab,
+                monsterTypeName = "Default Monster",
+                spawnWeight = 1,
+                poolMinSize = 2
+            };
         }
         
         Debug.Log("✓ Спавнер монстров создан на Canvas");
@@ -638,10 +632,6 @@ public class CastleSceneSetupUI : MonoBehaviour
                     Debug.Log($"    - {type.monsterTypeName}: вес={type.spawnWeight}, мин.пул={type.poolMinSize}");
                 }
             }
-        }
-        else if (spawner.monsterPrefab != null)
-        {
-            Debug.Log($"  Используется одиночный префаб монстра: {spawner.monsterPrefab.name}");
         }
         else
         {
@@ -708,8 +698,6 @@ public class CastleSceneSetupUI : MonoBehaviour
             rect.anchoredPosition = new Vector2(20, -20); // 20px от левого края, 20px от верха
             
             scoreText = scoreObj.AddComponent<Text>();
-            Font defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (defaultFont != null) scoreText.font = defaultFont;
             scoreText.fontSize = 48;
             scoreText.color = Color.white;
             scoreText.text = "Score: 0";
@@ -744,8 +732,6 @@ public class CastleSceneSetupUI : MonoBehaviour
             rect.anchoredPosition = new Vector2(20, -110); // Ниже счета
             
             monstersText = monstersObj.AddComponent<Text>();
-            Font defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (defaultFont != null) monstersText.font = defaultFont;
             monstersText.fontSize = 36;
             monstersText.color = Color.white;
             monstersText.text = "Monsters: 0";

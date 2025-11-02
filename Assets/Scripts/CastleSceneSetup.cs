@@ -344,7 +344,6 @@ public class CastleSceneSetup : MonoBehaviour
         spawner.spawnRadius = monsterPatrolRadius;
         
         // Монстры будут создаваться программно (без префабов)
-        spawner.monsterPrefab = null;
         spawner.monsterTypes = new MonsterPoolData[0];
         
         Debug.Log("✓ Спавнер монстров создан (монстры создаются программно)");
