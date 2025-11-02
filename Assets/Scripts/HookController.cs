@@ -68,6 +68,7 @@ public class HookController : MonoBehaviour
     private LineRenderer lineRenderer;
     private bool isFlying = false;
     private bool isRetracting = false;
+    private bool hasHitMonster = false; // Флаг что крюк уже убил монстра
     
     // Бросок по кривой Безье
     private enum FlightPhase
@@ -126,6 +127,30 @@ public class HookController : MonoBehaviour
         
         // Устанавливаем размер крюка
         ApplyHookScale();
+        
+        // Добавляем Rigidbody2D для работы коллайдера (kinematic, чтобы не влиять на физику)
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb == null)
+        {
+            rb = gameObject.AddComponent<Rigidbody2D>();
+        }
+        rb.isKinematic = true; // Kinematic чтобы не влиять на движение крюка
+        rb.gravityScale = 0f; // Отключаем гравитацию
+        
+        // Добавляем коллайдер для обнаружения столкновений с монстрами
+        CircleCollider2D hookCollider = GetComponent<CircleCollider2D>();
+        if (hookCollider == null)
+        {
+            hookCollider = gameObject.AddComponent<CircleCollider2D>();
+        }
+        hookCollider.isTrigger = true;
+        // Уменьшенный радиус для более точного попадания
+        hookCollider.radius = hookRadius * 0.4f; // Уменьшаем до 40% от исходного размера
+        // Устанавливаем тег для упрощения обнаружения
+        if (!gameObject.CompareTag("Hook"))
+        {
+            gameObject.tag = "Hook";
+        }
         
         // Создаем LineRenderer для линии
         if (lineRenderer == null)
@@ -430,6 +455,14 @@ public class HookController : MonoBehaviour
         bezierProgress = 0f;
         isFlying = true;
         isRetracting = false;
+        hasHitMonster = false; // Сбрасываем флаг попадания при новом броске
+        
+        // Включаем коллайдер обратно при новом броске
+        CircleCollider2D hookCollider = GetComponent<CircleCollider2D>();
+        if (hookCollider != null)
+        {
+            hookCollider.enabled = true;
+        }
         
         // Начинаем с позиции руки
         transform.position = handPosition;
@@ -834,9 +867,37 @@ public class HookController : MonoBehaviour
         }
     }
     
+    /// <summary>
+    /// Проверяет, был ли уже убит монстр этим крюком
+    /// </summary>
+    public bool HasHitMonster()
+    {
+        return hasHitMonster;
+    }
+    
+    /// <summary>
+    /// Отмечает что крюк попал в монстра и отключает коллайдер
+    /// </summary>
+    public void MarkMonsterHit()
+    {
+        if (hasHitMonster) return;
+        
+        hasHitMonster = true;
+        
+        // Отключаем коллайдер чтобы не убивать других монстров
+        CircleCollider2D hookCollider = GetComponent<CircleCollider2D>();
+        if (hookCollider != null)
+        {
+            hookCollider.enabled = false;
+        }
+        
+        // Попадание в монстра - начинаем возврат
+        currentPhase = FlightPhase.Returning;
+    }
+    
     void CheckMonsterHit()
     {
-        if (!isFlying || currentPhase != FlightPhase.Flying) return;
+        if (!isFlying || currentPhase != FlightPhase.Flying || hasHitMonster) return;
         
         Vector3 hookPos = transform.position;
         

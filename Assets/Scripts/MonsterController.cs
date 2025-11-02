@@ -79,6 +79,13 @@ public class MonsterController : MonoBehaviour
         {
             CreateDefaultSprite();
         }
+        
+        // Добавляем компонент для обработки столкновений с крюком
+        MonsterHitbox hitbox = GetComponent<MonsterHitbox>();
+        if (hitbox == null)
+        {
+            hitbox = gameObject.AddComponent<MonsterHitbox>();
+        }
     }
     
     void Update()

@@ -34,6 +34,7 @@ public class HookUI : MonoBehaviour
     private RectTransform rectTransform;
     private bool isFlying = false;
     private bool isRetracting = false;
+    private bool hasHitMonster = false; // Флаг что крюк уже убил монстра
     private Vector2 startPosition;
     private Vector2 targetPosition;
     private float flightProgress = 0f;
@@ -80,6 +81,31 @@ public class HookUI : MonoBehaviour
         }
         
         hookImage.enabled = false;
+        
+        // Добавляем Rigidbody2D для работы коллайдера (kinematic, чтобы не влиять на физику)
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb == null)
+        {
+            rb = gameObject.AddComponent<Rigidbody2D>();
+        }
+        rb.isKinematic = true; // Kinematic для UI элементов
+        rb.gravityScale = 0f; // Отключаем гравитацию
+        
+        // Добавляем коллайдер для обнаружения столкновений с монстрами
+        CircleCollider2D hookCollider = GetComponent<CircleCollider2D>();
+        if (hookCollider == null)
+        {
+            hookCollider = gameObject.AddComponent<CircleCollider2D>();
+        }
+        hookCollider.isTrigger = true;
+        // Конвертируем радиус из пикселей в мировые единицы и уменьшаем (примерно 100 пикселей = 1 единица)
+        hookCollider.radius = (hookRadius * 0.4f) / 100f; // Уменьшаем до 40% от исходного размера
+        
+        // Устанавливаем тег для упрощения обнаружения
+        if (!gameObject.CompareTag("Hook"))
+        {
+            gameObject.tag = "Hook";
+        }
     }
     
     void SetupHook()
@@ -123,6 +149,14 @@ public class HookUI : MonoBehaviour
         flightProgress = 0f;
         isFlying = true;
         isRetracting = false;
+        hasHitMonster = false; // Сбрасываем флаг попадания при новом броске
+        
+        // Включаем коллайдер обратно при новом броске
+        CircleCollider2D hookCollider = GetComponent<CircleCollider2D>();
+        if (hookCollider != null)
+        {
+            hookCollider.enabled = true;
+        }
         
         rectTransform.anchoredPosition = startPosition;
         
@@ -295,9 +329,38 @@ public class HookUI : MonoBehaviour
         }
     }
     
+    /// <summary>
+    /// Проверяет, был ли уже убит монстр этим крюком
+    /// </summary>
+    public bool HasHitMonster()
+    {
+        return hasHitMonster;
+    }
+    
+    /// <summary>
+    /// Отмечает что крюк попал в монстра и отключает коллайдер
+    /// </summary>
+    public void MarkMonsterHit()
+    {
+        if (hasHitMonster) return;
+        
+        hasHitMonster = true;
+        
+        // Отключаем коллайдер чтобы не убивать других монстров
+        CircleCollider2D hookCollider = GetComponent<CircleCollider2D>();
+        if (hookCollider != null)
+        {
+            hookCollider.enabled = false;
+        }
+        
+        // Попадание в монстра - начинаем возврат
+        isFlying = false;
+        StartRetract();
+    }
+    
     void CheckMonsterHit()
     {
-        if (!isFlying) return;
+        if (!isFlying || hasHitMonster) return;
         
         Vector2 hookPos = rectTransform.anchoredPosition;
         
