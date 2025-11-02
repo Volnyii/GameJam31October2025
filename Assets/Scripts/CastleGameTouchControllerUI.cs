@@ -12,9 +12,15 @@ public class CastleGameTouchControllerUI : MonoBehaviour
     [Header("References")]
     public HookUI hookController;
     public ArrowIndicatorUI arrowIndicatorUI;
-    public RectTransform playerRectTransform;
     public Canvas canvas;
     public CastlePlayerUI playerController;
+    public Transform playerTransform; // Transform игрока для получения позиции
+    
+    [Header("Player Prefab")]
+    [Tooltip("Префаб игрока с анимациями (если назначен, будет использован вместо поиска существующего)")]
+    public GameObject playerPrefab;
+    [Tooltip("Автоматически создавать игрока из префаба при старте")]
+    public bool autoSpawnPlayerFromPrefab = false;
     
     private bool isHoldingTouch = false;
     
@@ -42,24 +48,42 @@ public class CastleGameTouchControllerUI : MonoBehaviour
             }
         }
         
+        // Создаем игрока из префаба если нужно
+        if (autoSpawnPlayerFromPrefab && playerPrefab != null && playerController == null)
+        {
+            SpawnPlayerFromPrefab();
+        }
+        
         // Автоматически находим компоненты если не назначены
         if (hookController == null)
         {
             hookController = FindObjectOfType<HookUI>();
         }
         
-        if (playerRectTransform == null)
+        if (playerTransform == null)
         {
-            CastlePlayerUI player = FindObjectOfType<CastlePlayerUI>();
-            if (player != null)
+            if (playerController != null)
             {
-                playerRectTransform = player.GetComponent<RectTransform>();
+                playerTransform = playerController.transform;
+            }
+            else
+            {
+                CastlePlayerUI player = FindObjectOfType<CastlePlayerUI>();
+                if (player != null)
+                {
+                    playerTransform = player.transform;
+                }
             }
         }
         
         if (playerController == null)
         {
             playerController = FindObjectOfType<CastlePlayerUI>();
+            // Обновляем playerTransform после поиска
+            if (playerController != null && playerTransform == null)
+            {
+                playerTransform = playerController.transform;
+            }
         }
         
         if (arrowIndicatorUI == null)
@@ -70,9 +94,108 @@ public class CastleGameTouchControllerUI : MonoBehaviour
         Debug.Log($"TouchController инициализирован:");
         Debug.Log($"  - canvas: {canvas != null}");
         Debug.Log($"  - hookController: {hookController != null}");
-        Debug.Log($"  - playerRectTransform: {playerRectTransform != null}");
+        Debug.Log($"  - playerTransform: {playerTransform != null}");
         Debug.Log($"  - playerController: {playerController != null}");
         Debug.Log($"  - arrowIndicatorUI: {arrowIndicatorUI != null}");
+        Debug.Log($"  - playerPrefab: {playerPrefab != null}");
+    }
+    
+    /// <summary>
+    /// Создает игрока из префаба
+    /// </summary>
+    public void SpawnPlayerFromPrefab()
+    {
+        if (playerPrefab == null)
+        {
+            Debug.LogWarning("PlayerPrefab не назначен! Не могу создать игрока.");
+            return;
+        }
+        
+        // Удаляем старого игрока если есть
+        if (playerController != null)
+        {
+            Debug.Log($"Удаляю старого игрока: {playerController.gameObject.name}");
+            Destroy(playerController.gameObject);
+            playerController = null;
+            playerTransform = null;
+        }
+        else
+        {
+            // Ищем существующего игрока и удаляем
+            CastlePlayerUI existingPlayer = FindObjectOfType<CastlePlayerUI>();
+            if (existingPlayer != null)
+            {
+                Debug.Log($"Удаляю существующего игрока: {existingPlayer.gameObject.name}");
+                Destroy(existingPlayer.gameObject);
+            }
+        }
+        
+        // Создаем нового игрока из префаба (всегда вне Canvas, так как используется SpriteRenderer)
+        GameObject playerObj = Instantiate(playerPrefab);
+        playerObj.name = "Player";
+        
+        // Получаем или добавляем компонент CastlePlayerUI
+        playerController = playerObj.GetComponent<CastlePlayerUI>();
+        if (playerController == null)
+        {
+            playerController = playerObj.AddComponent<CastlePlayerUI>();
+            Debug.Log("Компонент CastlePlayerUI добавлен к префабу игрока");
+        }
+        
+        // Настраиваем компоненты игрока
+        playerController.SetupPlayerComponents();
+        
+        // Сбрасываем масштаб префаба перед применением настроек
+        // Это нужно чтобы избежать умножения масштабов
+        playerObj.transform.localScale = Vector3.one;
+        
+        // Применяем размер игрока если usePlayerScale включен
+        if (playerController.usePlayerScale)
+        {
+            playerController.ApplyPlayerScale();
+        }
+        
+        // Вызываем SetupPlayer() чтобы правильно установить позицию
+        // SetupPlayer() учитывает настройки useCustomPosition и playerPosition
+        playerController.SetupPlayer();
+        
+        // Если используется явная позиция, применяем её
+        if (playerController.useCustomPosition)
+        {
+            playerObj.transform.position = playerController.playerPosition;
+        }
+        else
+        {
+            // Если не используется явная позиция, рассчитываем позицию
+            Camera mainCam = Camera.main;
+            if (mainCam != null)
+            {
+                // Вычисляем позицию на вершине замка (примерно в середине экрана по вертикали)
+                float castleTopY = mainCam.transform.position.y + mainCam.orthographicSize * 0.8f;
+                playerObj.transform.position = new Vector3(0, castleTopY, 0);
+                // Обновляем playerPosition для сохранения позиции
+                playerController.playerPosition = playerObj.transform.position;
+            }
+        }
+        
+        // Сохраняем Transform для получения позиции
+        playerTransform = playerObj.transform;
+        
+        Debug.Log($"Игрок создан из префаба: {playerPrefab.name}");
+        Debug.Log($"  - Позиция (мировая): {playerObj.transform.position}");
+        Debug.Log($"  - Использует явную позицию: {playerController.useCustomPosition}");
+        Debug.Log($"  - Размер (scale): {playerController.playerScale}");
+        Debug.Log($"  - Использует playerScale: {playerController.usePlayerScale}");
+        Debug.Log($"  - Компонент CastlePlayerUI: {playerController != null}");
+    }
+    
+    /// <summary>
+    /// Подменяет текущего игрока на игрока из префаба
+    /// </summary>
+    [ContextMenu("Spawn Player From Prefab")]
+    public void SpawnPlayerFromPrefabContextMenu()
+    {
+        SpawnPlayerFromPrefab();
     }
     
     void Update()
@@ -192,10 +315,11 @@ public class CastleGameTouchControllerUI : MonoBehaviour
             Debug.LogWarning("playerController == null! Замах не начат");
         }
         
-        if (arrowIndicatorUI != null && playerRectTransform != null && canvas != null)
+        if (arrowIndicatorUI != null && playerTransform != null && canvas != null)
         {
             Vector2 canvasTargetPos = ScreenToCanvasPosition(screenPosition);
-            arrowIndicatorUI.Show(playerRectTransform.anchoredPosition, canvasTargetPos);
+            Vector2 playerCanvasPos = WorldToCanvasPosition(playerTransform.position);
+            arrowIndicatorUI.Show(playerCanvasPos, canvasTargetPos);
         }
     }
     
@@ -203,10 +327,11 @@ public class CastleGameTouchControllerUI : MonoBehaviour
     {
         if (!isHoldingTouch) return;
         
-        if (arrowIndicatorUI != null && playerRectTransform != null && canvas != null)
+        if (arrowIndicatorUI != null && playerTransform != null && canvas != null)
         {
             Vector2 canvasTargetPos = ScreenToCanvasPosition(screenPosition);
-            arrowIndicatorUI.Show(playerRectTransform.anchoredPosition, canvasTargetPos);
+            Vector2 playerCanvasPos = WorldToCanvasPosition(playerTransform.position);
+            arrowIndicatorUI.Show(playerCanvasPos, canvasTargetPos);
         }
     }
     
@@ -234,9 +359,10 @@ public class CastleGameTouchControllerUI : MonoBehaviour
         float castPower = 1f;
         
         // Вычисляем "силу" броска на основе времени удержания или расстояния
-        if (playerRectTransform != null)
+        if (playerTransform != null)
         {
-            float distance = Vector2.Distance(playerRectTransform.anchoredPosition, canvasPos);
+            Vector2 playerCanvasPos = WorldToCanvasPosition(playerTransform.position);
+            float distance = Vector2.Distance(playerCanvasPos, canvasPos);
             castPower = Mathf.Clamp01(distance / 500f); // Нормализуем по максимальному расстоянию
             Debug.Log($"Расстояние до цели: {distance}, сила броска: {castPower}");
         }
@@ -325,6 +451,41 @@ public class CastleGameTouchControllerUI : MonoBehaviour
         return RectTransformUtility.WorldToScreenPoint(
             canvas.worldCamera ?? Camera.main,
             canvas.GetComponent<RectTransform>().TransformPoint(canvasPos));
+    }
+    
+    /// <summary>
+    /// Конвертирует мировую позицию в позицию Canvas
+    /// </summary>
+    Vector2 WorldToCanvasPosition(Vector3 worldPos)
+    {
+        if (canvas == null || canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+        {
+            // Для ScreenSpaceOverlay конвертируем через камеру
+            Camera mainCam = Camera.main;
+            if (mainCam != null)
+            {
+                Vector2 screenPos = mainCam.WorldToScreenPoint(worldPos);
+                return ScreenToCanvasPosition(screenPos);
+            }
+        }
+        
+        // Для других режимов используем камеру Canvas
+        Camera canvasCam = canvas.worldCamera ?? Camera.main;
+        if (canvasCam != null && canvas != null)
+        {
+            Vector2 screenPos = canvasCam.WorldToScreenPoint(worldPos);
+            RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect,
+                screenPos,
+                canvasCam,
+                out Vector2 localPoint))
+            {
+                return localPoint;
+            }
+        }
+        
+        return Vector2.zero;
     }
 }
 

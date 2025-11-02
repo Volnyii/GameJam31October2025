@@ -1,20 +1,36 @@
 using UnityEngine;
-using UnityEngine.UI;
 
 /// <summary>
-/// Контроллер игрока как UI элемента на Canvas
-/// Автоматически настраивает все необходимые компоненты для работы на Canvas
+/// Контроллер игрока со SpriteRenderer
+/// Назначьте спрайт в инспекторе и настройте размеры через playerScale или Transform.localScale
 /// </summary>
-[RequireComponent(typeof(RectTransform))]
+[RequireComponent(typeof(SpriteRenderer))]
 public class CastlePlayerUI : MonoBehaviour
 {
-    [Header("Settings")]
+    [Header("Position Settings")]
+    [Tooltip("Использовать явную позицию или рассчитывать из castlePosition")]
+    public bool useCustomPosition = false;
+    [Tooltip("Явная позиция игрока в мировых координатах (используется если useCustomPosition = true)")]
+    public Vector3 playerPosition = Vector3.zero;
+    
+    [Header("Castle Position (для расчета, если useCustomPosition = false)")]
+    [Tooltip("Высота вершины замка (используется только если useCustomPosition = false)")]
     public float castleTopHeight = 3f;
+    [Tooltip("Позиция замка (используется только если useCustomPosition = false)")]
     public Vector2 castlePosition = Vector2.zero;
     
     [Header("References")]
-    [Tooltip("Картинка игрока (автоматически найдет если не назначена)")]
-    public Image playerImage;
+    [Tooltip("Спрайт игрока (можно назначить в инспекторе)")]
+    public Sprite playerSprite;
+    [Tooltip("Аниматор для игрока (опционально, для анимированных персонажей)")]
+    public Animator animator;
+    
+    [Header("Player Size Settings")]
+    [Tooltip("Размер игрока (масштаб спрайта). Можно настроить здесь или через Transform.localScale в редакторе")]
+    [Range(0.001f, 5f)]
+    public float playerScale = 1f;
+    [Tooltip("Автоматически применять playerScale к Transform.localScale (если false, используйте Transform.localScale в редакторе)")]
+    public bool usePlayerScale = true;
     
     [Header("Fishing Animation")]
     [Tooltip("Время анимации замаха (в секундах)")]
@@ -23,15 +39,16 @@ public class CastlePlayerUI : MonoBehaviour
     [Tooltip("Угол наклона при замахе (в градусах)")]
     [Range(0f, 45f)]
     public float windupAngle = 25f;
-    [Tooltip("Смещение при замахе назад (в пикселях)")]
-    [Range(0f, 50f)]
-    public float windupBackOffset = 20f;
+    [Tooltip("Смещение при замахе назад (в мировых единицах)")]
+    [Range(0f, 1f)]
+    public float windupBackOffset = 0.2f;
     
-    private RectTransform rectTransform;
-    private Vector2 originalPosition;
+    private SpriteRenderer spriteRenderer;
+    private Vector3 originalPosition;
     private Quaternion originalRotation;
     private bool isWindingUp = false;
     private float windupProgress = 0f;
+    private float lastAppliedScale = -1f; // Отслеживаем последнее примененное значение
     
     void Awake()
     {
@@ -44,51 +61,127 @@ public class CastlePlayerUI : MonoBehaviour
     }
     
     /// <summary>
-    /// Автоматически настраивает все компоненты для работы на Canvas
+    /// Автоматически настраивает компоненты игрока
     /// </summary>
     [ContextMenu("Setup Player Components")]
     public void SetupPlayerComponents()
     {
-        // RectTransform (обязателен)
-        rectTransform = GetComponent<RectTransform>();
-        if (rectTransform == null)
+        // Получаем или создаем SpriteRenderer
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        if (spriteRenderer == null)
         {
-            rectTransform = gameObject.AddComponent<RectTransform>();
+            spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
         }
         
-        // Настраиваем якоря для Canvas
-        rectTransform.anchorMin = new Vector2(0.5f, 0f);
-        rectTransform.anchorMax = new Vector2(0.5f, 0f);
-        rectTransform.pivot = new Vector2(0.5f, 0.5f);
-        rectTransform.sizeDelta = new Vector2(80, 80);
+        spriteRenderer.sortingOrder = 5;
+        spriteRenderer.sortingLayerName = "Default";
         
-        // Image (обязателен для отображения)
-        if (playerImage == null)
+        // Если спрайт назначен в инспекторе, используем его
+        if (playerSprite != null)
         {
-            playerImage = GetComponent<Image>();
+            spriteRenderer.sprite = playerSprite;
         }
-        
-        if (playerImage == null)
+        // Если спрайт уже есть на SpriteRenderer, сохраняем его
+        else if (spriteRenderer.sprite != null)
         {
-            playerImage = gameObject.AddComponent<Image>();
+            playerSprite = spriteRenderer.sprite;
         }
-        
-        // Создаем спрайт только если он не назначен вручную
-        // Если спрайт уже есть (из префаба или назначен вручную), используем его
-        if (playerImage.sprite == null)
+        // Если спрайта нет, создаем дефолтный
+        else
         {
             CreatePlayerSprite();
         }
+        
+        spriteRenderer.color = Color.white;
+        
+        // Получаем или находим Animator (для анимированных персонажей)
+        if (animator == null)
+        {
+            animator = GetComponent<Animator>();
+        }
+        
+        // Применяем размер если включен usePlayerScale
+        if (usePlayerScale)
+        {
+            ApplyPlayerScale();
+        }
     }
     
-    void SetupPlayer()
+    /// <summary>
+    /// Применяет настройки размера игрока (масштаб)
+    /// Можно вызвать вручную для применения изменений размера
+    /// </summary>
+    public void ApplyPlayerScale()
     {
-        // Позиционируем на вершине замка
-        if (rectTransform != null)
+        if (usePlayerScale)
         {
-            rectTransform.anchoredPosition = new Vector2(castlePosition.x, 1100f); // На вершине замка (в пикселях от низа)
-            originalPosition = rectTransform.anchoredPosition;
-            originalRotation = rectTransform.localRotation;
+            Vector3 targetScale = new Vector3(playerScale, playerScale, 1f);
+            transform.localScale = targetScale;
+            lastAppliedScale = playerScale;
+        }
+    }
+    
+    /// <summary>
+    /// Вызывается при изменении значений в инспекторе (в редакторе)
+    /// </summary>
+    void OnValidate()
+    {
+        // Применяем масштаб если значение изменилось в редакторе
+        if (usePlayerScale && lastAppliedScale != playerScale && Application.isPlaying == false)
+        {
+            // В редакторе применяем напрямую
+            if (spriteRenderer != null || GetComponent<SpriteRenderer>() != null)
+            {
+                Vector3 targetScale = new Vector3(playerScale, playerScale, 1f);
+                transform.localScale = targetScale;
+                lastAppliedScale = playerScale;
+            }
+        }
+        
+        // Применяем позицию если она была изменена в редакторе и используется явная позиция
+        if (useCustomPosition && Application.isPlaying == false)
+        {
+            transform.position = playerPosition;
+            originalPosition = playerPosition;
+        }
+    }
+    
+    public void SetupPlayer()
+    {
+        // Определяем позицию: явная или расчетная 
+        Vector3 pos;
+        if (useCustomPosition)
+        {
+            // Используем явную позицию
+            pos = playerPosition;
+        }
+        else
+        {
+            // Рассчитываем позицию на вершине замка
+            pos = new Vector3(castlePosition.x, castlePosition.y + castleTopHeight, 0);
+        }
+        
+        transform.position = pos;
+        originalPosition = pos;
+        originalRotation = transform.localRotation;
+        
+        // Применяем размер если включен usePlayerScale
+        if (usePlayerScale)
+        {
+            ApplyPlayerScale();
+        }
+    }
+    
+    /// <summary>
+    /// Устанавливает позицию игрока вручную
+    /// </summary>
+    public void SetPosition(Vector3 position)
+    {
+        playerPosition = position;
+        if (useCustomPosition)
+        {
+            transform.position = position;
+            originalPosition = position;
         }
     }
     
@@ -104,6 +197,25 @@ public class CastlePlayerUI : MonoBehaviour
             windupProgress = Mathf.Max(0f, windupProgress - Time.deltaTime * 2f);
             ApplyWindupTransform(windupProgress);
         }
+        
+        // Применяем размер только если значение изменилось (не каждый кадр)
+        if (usePlayerScale && Mathf.Abs(lastAppliedScale - playerScale) > 0.001f)
+        {
+            ApplyPlayerScale();
+        }
+        
+        // Обновляем позицию если она была изменена в инспекторе и используется явная позиция
+        if (useCustomPosition && Vector3.Distance(transform.position, playerPosition) > 0.001f)
+        {
+            transform.position = playerPosition;
+            originalPosition = playerPosition;
+        }
+        
+        // Обновляем спрайт если он был изменен в инспекторе
+        if (playerSprite != null && spriteRenderer != null && spriteRenderer.sprite != playerSprite)
+        {
+            spriteRenderer.sprite = playerSprite;
+        }
     }
     
     /// <summary>
@@ -111,11 +223,17 @@ public class CastlePlayerUI : MonoBehaviour
     /// </summary>
     public void StartWindup()
     {
-        if (rectTransform == null) return;
+        if (spriteRenderer == null) return;
         
         isWindingUp = true;
-        originalPosition = rectTransform.anchoredPosition;
-        originalRotation = rectTransform.localRotation;
+        originalPosition = transform.position;
+        originalRotation = transform.localRotation;
+        
+        // Если есть аниматор, запускаем триггер анимации замаха
+        if (animator != null)
+        {
+            animator.SetTrigger("Windup");
+        }
     }
     
     /// <summary>
@@ -123,7 +241,7 @@ public class CastlePlayerUI : MonoBehaviour
     /// </summary>
     void UpdateWindupAnimation()
     {
-        if (rectTransform == null) return;
+        if (spriteRenderer == null) return;
         
         windupProgress += Time.deltaTime / windupDuration;
         windupProgress = Mathf.Clamp01(windupProgress);
@@ -136,18 +254,18 @@ public class CastlePlayerUI : MonoBehaviour
     /// </summary>
     void ApplyWindupTransform(float progress)
     {
-        if (rectTransform == null) return;
+        if (spriteRenderer == null) return;
         
         // Кривая анимации (ease-out для плавности)
         float easedProgress = 1f - Mathf.Pow(1f - progress, 3f);
         
         // Наклон назад и вверх (как рыбак замахивается)
         float angle = -windupAngle * easedProgress;
-        rectTransform.localRotation = Quaternion.Euler(0, 0, angle);
+        transform.localRotation = Quaternion.Euler(0, 0, angle);
         
-        // Небольшое смещение назад при замахе
-        Vector2 offset = new Vector2(-windupBackOffset * easedProgress, windupBackOffset * 0.5f * easedProgress);
-        rectTransform.anchoredPosition = originalPosition + offset;
+        // Небольшое смещение назад при замахе (в мировых единицах)
+        Vector3 offset = new Vector3(-windupBackOffset * easedProgress, windupBackOffset * 0.5f * easedProgress, 0);
+        transform.position = originalPosition + offset;
     }
     
     /// <summary>
@@ -155,9 +273,16 @@ public class CastlePlayerUI : MonoBehaviour
     /// </summary>
     public void Cast(float castPower = 1f)
     {
-        if (rectTransform == null) return;
+        if (spriteRenderer == null) return;
         
         isWindingUp = false;
+        
+        // Если есть аниматор, запускаем триггер анимации броска
+        if (animator != null)
+        {
+            animator.SetTrigger("Cast");
+            animator.SetFloat("CastPower", castPower);
+        }
         
         // Анимация броска - быстрое движение вперед
         StartCoroutine(CastAnimation(castPower));
@@ -170,8 +295,8 @@ public class CastlePlayerUI : MonoBehaviour
     {
         float castDuration = 0.2f;
         float elapsed = 0f;
-        Vector2 startPos = rectTransform.anchoredPosition;
-        Quaternion startRot = rectTransform.localRotation;
+        Vector3 startPos = transform.position;
+        Quaternion startRot = transform.localRotation;
         
         // Быстрое движение вперед и вниз (бросок)
         while (elapsed < castDuration)
@@ -179,15 +304,15 @@ public class CastlePlayerUI : MonoBehaviour
             elapsed += Time.deltaTime;
             float t = elapsed / castDuration;
             
-            // Движение вперед при броске
+            // Движение вперед при броске (в мировых единицах)
             float forwardOffset = windupBackOffset * 1.5f * (1f - t) * power;
             float downOffset = windupBackOffset * 0.3f * (1f - t) * power;
             
-            rectTransform.anchoredPosition = originalPosition + new Vector2(forwardOffset, -downOffset);
+            transform.position = originalPosition + new Vector3(forwardOffset, -downOffset, 0);
             
             // Возврат угла
             float angle = -windupAngle * (1f - t);
-            rectTransform.localRotation = Quaternion.Euler(0, 0, angle);
+            transform.localRotation = Quaternion.Euler(0, 0, angle);
             
             yield return null;
         }
@@ -201,8 +326,8 @@ public class CastlePlayerUI : MonoBehaviour
         }
         
         // Финальная позиция
-        rectTransform.anchoredPosition = originalPosition;
-        rectTransform.localRotation = originalRotation;
+        transform.position = originalPosition;
+        transform.localRotation = originalRotation;
     }
     
     /// <summary>
@@ -216,6 +341,9 @@ public class CastlePlayerUI : MonoBehaviour
     
     void CreatePlayerSprite()
     {
+        // Создаем спрайт только если он не назначен
+        if (playerSprite != null || spriteRenderer == null) return;
+        
         Texture2D texture = new Texture2D(64, 64);
         Color[] pixels = new Color[64 * 64];
         
@@ -246,14 +374,13 @@ public class CastlePlayerUI : MonoBehaviour
         texture.Apply();
         
         Sprite sprite = Sprite.Create(texture, new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f), 100f);
-        playerImage.sprite = sprite;
-        playerImage.color = Color.white;
+        spriteRenderer.sprite = sprite;
+        spriteRenderer.color = Color.white;
     }
     
     public Vector2 Position
     {
-        get { return rectTransform.anchoredPosition; }
-        set { rectTransform.anchoredPosition = value; }
+        get { return transform.position; }
+        set { transform.position = new Vector3(value.x, value.y, 0); }
     }
 }
-

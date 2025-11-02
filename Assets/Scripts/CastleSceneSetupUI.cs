@@ -555,7 +555,6 @@ public class CastleSceneSetupUI : MonoBehaviour
         
         touchController.hookController = hook;
         touchController.arrowIndicatorUI = arrow;
-        touchController.playerRectTransform = player.GetComponent<RectTransform>();
         touchController.playerController = player;
         touchController.canvas = canvas;
         
