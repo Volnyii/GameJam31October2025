@@ -19,9 +19,9 @@ public class CastlePlayerUI : MonoBehaviour
     [Tooltip("Позиция замка (используется только если useCustomPosition = false)")]
     public Vector2 castlePosition = Vector2.zero;
     
-    [Header("References")]
-    [Tooltip("Спрайт игрока (можно назначить в инспекторе)")]
-    public Sprite playerSprite;
+    // [Header("References")]
+    //[Tooltip("Спрайт игрока (можно назначить в инспекторе)")]
+   // public Sprite playerSprite;
     [Tooltip("Аниматор для игрока (опционально, для анимированных персонажей)")]
     public Animator animator;
     
@@ -75,22 +75,6 @@ public class CastlePlayerUI : MonoBehaviour
         
         spriteRenderer.sortingOrder = 5;
         spriteRenderer.sortingLayerName = "Default";
-        
-        // Если спрайт назначен в инспекторе, используем его
-        if (playerSprite != null)
-        {
-            spriteRenderer.sprite = playerSprite;
-        }
-        // Если спрайт уже есть на SpriteRenderer, сохраняем его
-        else if (spriteRenderer.sprite != null)
-        {
-            playerSprite = spriteRenderer.sprite;
-        }
-        // Если спрайта нет, создаем дефолтный
-        else
-        {
-            CreatePlayerSprite();
-        }
         
         spriteRenderer.color = Color.white;
         
@@ -209,12 +193,6 @@ public class CastlePlayerUI : MonoBehaviour
         {
             transform.position = playerPosition;
             originalPosition = playerPosition;
-        }
-        
-        // Обновляем спрайт если он был изменен в инспекторе
-        if (playerSprite != null && spriteRenderer != null && spriteRenderer.sprite != playerSprite)
-        {
-            spriteRenderer.sprite = playerSprite;
         }
     }
     
@@ -341,8 +319,7 @@ public class CastlePlayerUI : MonoBehaviour
     
     void CreatePlayerSprite()
     {
-        // Создаем спрайт только если он не назначен
-        if (playerSprite != null || spriteRenderer == null) return;
+        // Создаем спрайт только если он не назначе
         
         Texture2D texture = new Texture2D(64, 64);
         Color[] pixels = new Color[64 * 64];
